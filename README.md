@@ -2,18 +2,27 @@
 tests santander
 
 ####################################
+/*  ────────────────────────────────────────────────────────────────────────────
+    ADAPTA el package a tu estructura de proyecto
+   ────────────────────────────────────────────────────────────────────────── */
+package eresearch.actions;
 
-import com.santander.bigdata.core3.uv.actions.InvalidateMetadataEconomicResearch;
 import com.santander.supra.core.execution.Execution;
-import com.santander.supra.core.session.SessionWrapper;
 import com.santander.supra.core.jdbc.JDBCExecutorHandler;
 import com.santander.supra.core.jdbc.JDBCHandler;
+import com.santander.supra.core.session.SessionWrapper;
+import com.santander.supra.core.utils.JSONUtils;
 import com.santander.supra.core.variables.VariableResolutionHandler;
 import com.santander.supra.core.variables.VariableResolutionHandlerFactory;
-import com.santander.utils.JSONUtils;
-import org.junit.jupiter.api.*;
+import com.santander.supra.economicresearch.actions.InvalidateMetadataEconomicResearch;
+import com.santander.supra.exceptions.SparkPropertyNotFoundException;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
@@ -23,84 +32,99 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * Tests unitarios para {@link InvalidateMetadataEconomicResearch}.
+ */
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({VariableResolutionHandlerFactory.class,
-                 JDBCExecutorHandler.class,
-                 JSONUtils.class})
-class InvalidateMetadataEconomicResearchTest {
+@PowerMockIgnore("javax.management.*")       // evita warning con JDK 8+
+@PrepareForTest({
+        JSONUtils.class,                       // ⬅  métodos estáticos que mockeamos
+        VariableResolutionHandlerFactory.class,
+        JDBCExecutorHandler.class,
+        JDBCHandler.class,                     // si haces getConnection en execute()
+        InvalidateMetadataEconomicResearch.class
+})
+public class InvalidateMetadataEconomicResearchTest {
 
-    private InvalidateMetadataEconomicResearch action;
+    /** Subclase que expone el método protected parseArguments. */
+    private static final class TestableInvalidate
+            extends InvalidateMetadataEconomicResearch {
 
-    @BeforeEach
-    void setUp() {
-        action = new InvalidateMetadataEconomicResearch();
+        @Override public void parseArguments(String args)
+                throws SparkPropertyNotFoundException {
+            super.parseArguments(args);
+        }
     }
 
-    // ---------- 1. parseArguments ----------
+    private TestableInvalidate action;
+
+    @BeforeEach
+    void setUp() { action = new TestableInvalidate(); }
+
+    /* ───────────────────────── 1. parseArguments ─────────────────────────── */
+
     @Test
     void parseArgumentsPopulatesTables() throws Exception {
-        // Mock JSONUtils.argsFromJson(...) para que devuelva dos tablas separadas por coma
+        // 1️⃣  Mock del estático JSONUtils.argsFromJson(...)
         PowerMockito.mockStatic(JSONUtils.class);
         when(JSONUtils.argsFromJson("{dummy}", "tables"))
                 .thenReturn("db1.tableA,db2.tableB");
 
         action.parseArguments("{dummy}");
 
-        List<String> tables = action.getTables();
-        assertEquals(2, tables.size());
-        assertTrue(tables.contains("db1.tableA"));
-        assertTrue(tables.contains("db2.tableB"));
+        assertEquals(
+                List.of("db1.tableA", "db2.tableB"),
+                action.getTables(),
+                "La lista interna de tablas debe contener las dos tablas parseadas"
+        );
     }
 
-    // ---------- 2. invalidateBuild ----------
+    /* ───────────────────────── 2. invalidateBuild ────────────────────────── */
+
     @Test
-    void invalidateBuildReturnsCorrectSentence() {
+    void invalidateBuildGeneratesCorrectSentence() {
         String sql = action.invalidateBuild("db1.tableA");
         assertEquals("INVALIDATE METADATA db1.tableA", sql);
     }
 
-    // ---------- 3. getTables reflejado ----------
-    @Test
-    void getTablesAfterParseReturnsSameList() throws Exception {
-        PowerMockito.mockStatic(JSONUtils.class);
-        when(JSONUtils.argsFromJson(anyString(), eq("tables")))
-                .thenReturn("t1");
+    /* ───────────────────────── 3. execute(...) ───────────────────────────── */
 
-        action.parseArguments("{}");
-        assertEquals(List.of("t1"), action.getTables());
-    }
-
-    // ---------- 4. execute(...) lanza queries ----------
     @Test
     void executeLaunchesOneQueryPerTable() throws Exception {
-        // ---- mocks estáticos ----
-        PowerMockito.mockStatic(JSONUtils.class);
-        when(JSONUtils.argsFromJson(anyString(), eq("tables"))).thenReturn("tbl1,tbl2");
 
+        /* 3-A  Mock de JSONUtils para devolver dos tablas */
+        PowerMockito.mockStatic(JSONUtils.class);
+        when(JSONUtils.argsFromJson(anyString(), eq("tables")))
+                .thenReturn("tbl1,tbl2");
+
+        /* 3-B  Mock del VariableResolutionHandler para devolver el mismo args */
         VariableResolutionHandler vrh = mock(VariableResolutionHandler.class);
         when(vrh.translateQuery(any(), any(), any(), anyString()))
-                .thenReturn("{ \"tables\":\"tbl1,tbl2\" }");
+                .thenReturn("{\"tables\":\"tbl1,tbl2\"}");
 
         PowerMockito.mockStatic(VariableResolutionHandlerFactory.class);
         when(VariableResolutionHandlerFactory.getVariableResolutionHandler(any()))
                 .thenReturn(vrh);
 
+        /* 3-C  Mock del JDBCExecutorHandler y (opcional) JDBCHandler.getConnection */
         JDBCExecutorHandler jdbcExec = mock(JDBCExecutorHandler.class);
         PowerMockito.mockStatic(JDBCExecutorHandler.class);
         when(JDBCExecutorHandler.getInstance()).thenReturn(jdbcExec);
 
-        // Para evitar NPE con la conexión, mockeamos getConnection (si lo usas)
         PowerMockito.mockStatic(JDBCHandler.class);
-        when(JDBCHandler.getConnection(JDBCHandler.IMPALA)).thenReturn(mock(Connection.class));
+        when(JDBCHandler.getConnection(JDBCHandler.IMPALA))
+                .thenReturn(mock(Connection.class));
 
-        // ---- objetos “dummy” ----
+        /* 3-D  Objetos de soporte */
         SessionWrapper session = mock(SessionWrapper.class);
-        Execution execution    = mock(Execution.class);
+        Execution      execution = mock(Execution.class);
 
-        // ---- llamada ----
-        action.execute(session, execution);
+        /* 3-E  Invocación */
+        int result = action.execute(session, execution);
 
-        // ---- verificación ----
+        /* 3-F  Verificaciones */
+        assertEquals(0, result, "Action debería devolver RESULT_SUCCESS (0)");
+
         ArgumentCaptor<String> sqlCap = ArgumentCaptor.forClass(String.class);
         verify(jdbcExec, times(2))
                 .launchQueries(eq(execution), eq(session), any(), sqlCap.capture());
