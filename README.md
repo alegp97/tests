@@ -3,35 +3,32 @@ tests santander
 
 ####################################
 @Test
-public void testExecute_shouldLaunchInvalidateQueries() throws Exception {
-    // Arrange
-    InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch();
+public void testExecute_shouldLaunchQueries() throws Exception {
+    // Subclase del componente para sobrescribir comportamiento
+    InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch() {
+        @Override
+        protected List<String> getTables() {
+            return Arrays.asList("db.table1", "db.table2");
+        }
+    };
 
-    // Mocks
     SessionWrapper session = mock(SessionWrapper.class);
     Execution execution = mock(Execution.class);
 
-    VariableResolutionHandler mockHandler = mock(VariableResolutionHandler.class);
-    when(mockHandler.translateQuery(any(), any(), any())).thenReturn("tables:db1,db2");
-
-    VariableResolutionHandlerFactory factory = mockStatic(VariableResolutionHandlerFactory.class).getMock();
-    when(VariableResolutionHandlerFactory.getVariableResolutionHandler()).thenReturn(mockHandler);
-
-    Connection mockConn = mock(Connection.class);
-    mockStatic(JDBCHandler.class);
-    when(JDBCHandler.getConnection(JDBCHandler.IMPALA)).thenReturn(mockConn);
+    // Mock JDBC y otras dependencias internas si aplica
+    Connection mockConnection = mock(Connection.class);
+    when(JDBCHandler.getConnection(JDBCHandler.IMPALA)).thenReturn(mockConnection);
 
     JDBCExecutorHandler mockExecHandler = mock(JDBCExecutorHandler.class);
     mockStatic(JDBCExecutorHandler.class);
     when(JDBCExecutorHandler.getInstance()).thenReturn(mockExecHandler);
 
-    doNothing().when(mockExecHandler).launchQueries(any(), any(), any(), any(), anyBoolean(), anyBoolean(), anyInt(), isNull());
-
-    // Act
+    // Ejecutamos y verificamos
     int result = component.execute(session, execution);
-
-    // Assert
     assertEquals(DataProperties.RESULT_SUCCESS, result);
-    verify(mockExecHandler, times(2)).launchQueries(any(), any(), any(), any(), anyBoolean(), anyBoolean(), anyInt(), isNull());
+
+    // Verificamos llamadas
+    verify(mockExecHandler, times(2)).launchQueries(eq(execution), eq(session), eq(mockConnection), anyString(),
+        argThat(map -> map.get("isCritical").equals(true) && map.get("isTraceable").equals(true)));
 }
 
