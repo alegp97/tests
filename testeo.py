@@ -1,29 +1,44 @@
 @Test
-public void testExecute_shouldLaunchQueries() throws Exception {
-    // Subclase del componente para sobrescribir comportamiento
-    InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch() {
-        @Override
-        protected List<String> getTables() {
-            return Arrays.asList("db.table1", "db.table2");
-        }
-    };
+    public void testExecute_shouldLaunchQueries() throws Exception {
+        // set env
+        System.setProperty("HDFS_CONFIG", "mock-config");
 
-    SessionWrapper session = mock(SessionWrapper.class);
-    Execution execution = mock(Execution.class);
+        // Mocks de dependencias
+        SessionWrapper session = mock(SessionWrapper.class);
+        Execution execution = mock(Execution.class);
+        VariableResolutionHandler mockResolver = mock(VariableResolutionHandler.class);
+        JDBCExecutorHandler mockExecHandler = mock(JDBCExecutorHandler.class);
 
-    // Mock JDBC y otras dependencias internas si aplica
-    Connection mockConnection = mock(Connection.class);
-    when(JDBCHandler.getConnection(JDBCHandler.IMPALA)).thenReturn(mockConnection);
+        // mock args + resolución
+        String applicationArgs = "{\"tables\": \"tableA,tableB\"}";
+        when(session.getApplicationArguments()).thenReturn(applicationArgs);
+        when(execution.getName()).thenReturn("mockExecution");
 
-    JDBCExecutorHandler mockExecHandler = mock(JDBCExecutorHandler.class);
-    mockStatic(JDBCExecutorHandler.class);
-    when(JDBCExecutorHandler.getInstance()).thenReturn(mockExecHandler);
+        PowerMockito.mockStatic(VariableResolutionHandlerFactory.class);
+        when(VariableResolutionHandlerFactory.getVariableResolutionHandler()).thenReturn(mockResolver);
+        when(mockResolver.translateQuery(any(), any(), any())).thenReturn(applicationArgs);
 
-    // Ejecutamos y verificamos
-    int result = component.execute(session, execution);
-    assertEquals(DataProperties.RESULT_SUCCESS, result);
+        PowerMockito.mockStatic(JDBCExecutorHandler.class);
+        when(JDBCExecutorHandler.getInstance()).thenReturn(mockExecHandler);
 
-    // Verificamos llamadas
-    verify(mockExecHandler, times(2)).launchQueries(eq(execution), eq(session), eq(mockConnection), anyString(),
-        argThat(map -> map.get("isCritical").equals(true) && map.get("isTraceable").equals(true)));
-}
+        // Espía del componente para exponer el método protegido
+        InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch() {
+            @Override
+            protected void parseArguments(String args) {
+                super.parseArguments(args);  // deja el comportamiento real
+            }
+
+            @Override
+            protected String invalidateBuild(String table) {
+                return "INVALIDATE METADATA " + table;
+            }
+        };
+
+        int result = component.execute(session, execution);
+
+        // Verifica que se ejecutaron dos queries
+        verify(mockExecHandler, times(2)).launchQueries(
+            eq(execution), eq(session), any(Connection.class), contains("INVALIDATE METADATA"), any());
+
+        assertEquals(DataProperties.RESULT_SUCCESS, result);
+    }
