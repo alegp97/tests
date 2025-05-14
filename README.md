@@ -2,46 +2,36 @@
 tests santander
 
 ####################################
-import org.junit.Test;
-import static org.junit.Assert.*;
+@Test
+public void testExecute_shouldLaunchInvalidateQueries() throws Exception {
+    // Arrange
+    InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch();
 
-import java.util.Arrays;
-import java.util.List;
+    // Mocks
+    SessionWrapper session = mock(SessionWrapper.class);
+    Execution execution = mock(Execution.class);
 
-import com.santander.eresearch.metadata.ddl.invalidatemetadata.InvalidateMetadataEconomicResearch;
-import com.santander.supra.core.staging.exceptions.SparkPropertyNotFoundException;
+    VariableResolutionHandler mockHandler = mock(VariableResolutionHandler.class);
+    when(mockHandler.translateQuery(any(), any(), any())).thenReturn("tables:db1,db2");
 
-public class InvalidateMetadataEconomicResearchTest {
+    VariableResolutionHandlerFactory factory = mockStatic(VariableResolutionHandlerFactory.class).getMock();
+    when(VariableResolutionHandlerFactory.getVariableResolutionHandler()).thenReturn(mockHandler);
 
+    Connection mockConn = mock(Connection.class);
+    mockStatic(JDBCHandler.class);
+    when(JDBCHandler.getConnection(JDBCHandler.IMPALA)).thenReturn(mockConn);
 
-    public static class InvalidateMetadataEconomicResearchTestable extends InvalidateMetadataEconomicResearch {
-        @Override
-        public void parseArguments(String applicationArgs) throws SparkPropertyNotFoundException {
-            super.parseArguments(applicationArgs);
-        }
+    JDBCExecutorHandler mockExecHandler = mock(JDBCExecutorHandler.class);
+    mockStatic(JDBCExecutorHandler.class);
+    when(JDBCExecutorHandler.getInstance()).thenReturn(mockExecHandler);
 
-        @Override
-        public List<String> getTables() {
-            return super.getTables();
-        }
+    doNothing().when(mockExecHandler).launchQueries(any(), any(), any(), any(), anyBoolean(), anyBoolean(), anyInt(), isNull());
 
-        public String callInvalidateBuild(String table) {
-            return invalidateBuild(table);
-        }
-    }
+    // Act
+    int result = component.execute(session, execution);
 
-    @Test
-    public void testParseArgumentsAndInvalidateBuild() throws Exception {
-        InvalidateMetadataEconomicResearchTestable testInstance = new InvalidateMetadataEconomicResearchTestable();
-
-        String argsJson = "{\"tables\": \"table1,table2\"}";
-
-
-        testInstance.parseArguments(argsJson);
-        List<String> tables = testInstance.getTables();
-        String query = testInstance.callInvalidateBuild("table1");
-
-        assertEquals(Arrays.asList("table1", "table2"), tables);
-        assertEquals("INVALIDATE METADATA table1", query);
-    }
+    // Assert
+    assertEquals(DataProperties.RESULT_SUCCESS, result);
+    verify(mockExecHandler, times(2)).launchQueries(any(), any(), any(), any(), anyBoolean(), anyBoolean(), anyInt(), isNull());
 }
+
