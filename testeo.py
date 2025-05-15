@@ -1,44 +1,54 @@
-@Test
-    public void testExecute_shouldLaunchQueries() throws Exception {
-        // set env
-        System.setProperty("HDFS_CONFIG", "mock-config");
+@RunWith(MockitoJUnitRunner.class)
+public class SelectCheckFatalVFTest {
 
-        // Mocks de dependencias
-        SessionWrapper session = mock(SessionWrapper.class);
-        Execution execution = mock(Execution.class);
-        VariableResolutionHandler mockResolver = mock(VariableResolutionHandler.class);
-        JDBCExecutorHandler mockExecHandler = mock(JDBCExecutorHandler.class);
+    private SelectCheckFatalVF component;
 
-        // mock args + resolución
-        String applicationArgs = "{\"tables\": \"tableA,tableB\"}";
-        when(session.getApplicationArguments()).thenReturn(applicationArgs);
-        when(execution.getName()).thenReturn("mockExecution");
-
-        PowerMockito.mockStatic(VariableResolutionHandlerFactory.class);
-        when(VariableResolutionHandlerFactory.getVariableResolutionHandler()).thenReturn(mockResolver);
-        when(mockResolver.translateQuery(any(), any(), any())).thenReturn(applicationArgs);
-
-        PowerMockito.mockStatic(JDBCExecutorHandler.class);
-        when(JDBCExecutorHandler.getInstance()).thenReturn(mockExecHandler);
-
-        // Espía del componente para exponer el método protegido
-        InvalidateMetadataEconomicResearch component = new InvalidateMetadataEconomicResearch() {
-            @Override
-            protected void parseArguments(String args) {
-                super.parseArguments(args);  // deja el comportamiento real
-            }
-
-            @Override
-            protected String invalidateBuild(String table) {
-                return "INVALIDATE METADATA " + table;
-            }
-        };
-
-        int result = component.execute(session, execution);
-
-        // Verifica que se ejecutaron dos queries
-        verify(mockExecHandler, times(2)).launchQueries(
-            eq(execution), eq(session), any(Connection.class), contains("INVALIDATE METADATA"), any());
-
-        assertEquals(DataProperties.RESULT_SUCCESS, result);
+    @Before
+    public void setUp() {
+        component = new SelectCheckFatalVF();
     }
+
+    @Test
+    public void testGetProjectionList() {
+        List<String> expected = Collections.singletonList("MSG");
+        List<String> actual = component.getProjectionList();
+        assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testSelect() throws Exception {
+        Feed mockFeed = mock(Feed.class);
+        List<Field> mockFields = Collections.emptyList();
+        String result = component.select(mockFeed, mockFields);
+        assertEquals("", result);
+    }
+
+    @Test
+    public void testFrom() {
+        Feed mockFeed = mock(Feed.class);
+        String result = component.from(mockFeed);
+        assertEquals("", result);
+    }
+
+    @Test
+    public void testWhere() {
+        PartitionsHandler mockPartitions = mock(PartitionsHandler.class);
+        Feed mockFeed = mock(Feed.class);
+        String result = component.where(mockFeed, mockPartitions);
+        assertEquals("", result);
+    }
+
+    @Test
+    public void testBuild() throws Exception {
+        SessionWrapper mockSession = mock(SessionWrapper.class);
+        Execution mockExecution = mock(Execution.class);
+
+        String result = component.build(mockSession, mockExecution);
+
+        assertTrue(result.contains(SQLConstants.VAL_DATABASE));
+        assertTrue(result.contains("${TABLE_ALERTS_VF}"));
+        assertTrue(result.contains("${LOAD_DATE}"));
+        assertTrue(result.contains("${EXECUTION_DATE}"));
+        assertTrue(result.contains("${tableName}"));
+    }
+}
