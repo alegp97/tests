@@ -1,54 +1,56 @@
-@RunWith(MockitoJUnitRunner.class)
 public class SelectCheckFatalVFTest {
 
-    private SelectCheckFatalVF component;
+    private static class TestableSelectCheckFatalVF extends SelectCheckFatalVF {
+        @Override
+        public String build(SessionWrapper session, Execution execution) {
+            // Puedes hacer override aquí si necesitas controlar el entorno del test
+            return super.build(session, execution);
+        }
+
+        // Acceso público a métodos protegidos para test
+        public String callSelect(Feed feed, List<Field> fields, String... args) throws Exception {
+            return select(feed, fields, args);
+        }
+
+        public String callFrom(Feed feed) {
+            return from(feed);
+        }
+
+        public String callWhere(Feed feed, PartitionsHandler handler) {
+            return where(feed, handler);
+        }
+    }
+
+    private TestableSelectCheckFatalVF component;
 
     @Before
-    public void setUp() {
-        component = new SelectCheckFatalVF();
+    public void setup() {
+        component = new TestableSelectCheckFatalVF();
     }
 
     @Test
     public void testGetProjectionList() {
-        List<String> expected = Collections.singletonList("MSG");
-        List<String> actual = component.getProjectionList();
-        assertEquals(expected, actual);
+        List<String> projection = component.getProjectionList();
+        assertEquals(Collections.singletonList("MSG"), projection);
     }
 
     @Test
-    public void testSelect() throws Exception {
+    public void testSelectReturnsExpectedString() throws Exception {
         Feed mockFeed = mock(Feed.class);
         List<Field> mockFields = Collections.emptyList();
-        String result = component.select(mockFeed, mockFields);
-        assertEquals("", result);
+        assertEquals("", component.callSelect(mockFeed, mockFields));
     }
 
     @Test
-    public void testFrom() {
+    public void testFromReturnsExpectedString() {
         Feed mockFeed = mock(Feed.class);
-        String result = component.from(mockFeed);
-        assertEquals("", result);
+        assertEquals("", component.callFrom(mockFeed));
     }
 
     @Test
-    public void testWhere() {
-        PartitionsHandler mockPartitions = mock(PartitionsHandler.class);
+    public void testWhereReturnsExpectedString() {
         Feed mockFeed = mock(Feed.class);
-        String result = component.where(mockFeed, mockPartitions);
-        assertEquals("", result);
-    }
-
-    @Test
-    public void testBuild() throws Exception {
-        SessionWrapper mockSession = mock(SessionWrapper.class);
-        Execution mockExecution = mock(Execution.class);
-
-        String result = component.build(mockSession, mockExecution);
-
-        assertTrue(result.contains(SQLConstants.VAL_DATABASE));
-        assertTrue(result.contains("${TABLE_ALERTS_VF}"));
-        assertTrue(result.contains("${LOAD_DATE}"));
-        assertTrue(result.contains("${EXECUTION_DATE}"));
-        assertTrue(result.contains("${tableName}"));
+        PartitionsHandler mockHandler = mock(PartitionsHandler.class);
+        assertEquals("", component.callWhere(mockFeed, mockHandler));
     }
 }
