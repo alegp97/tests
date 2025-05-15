@@ -10,38 +10,57 @@ import com.santander.supra.core.actions.Feed;
 import com.santander.supra.core.utils.sql.SQLConstants;
 
 /**
- * Unit-test for {@link SelectCountStaging}.
+ * Unit-tests for {@link AlterViewRawSanitedERVT}.
  */
-public class SelectCountStagingTest {
+public class AlterViewRawSanitedERVTTest {
 
-    /** Subclase interna que expone el método protected para el test. */
-    private static class Testable extends SelectCountStaging {
-        public String callFrom(Feed feed) {          // simple puente hacia el protected
-            return super.from(feed);
+    /** Sub-clase que expone y controla la dependencia getTableName(feed). */
+    private static class Testable extends AlterViewRawSanitedERVT {
+        @Override
+        protected String getTableName(Feed feed) {   // forzamos un nombre estable
+            return "vw_raw_sanitized_orders";
         }
+        // Si necesitáramos exponer create(...) como público:
+        String callCreate(Feed feed) { return super.create(feed); }
     }
 
-    private Testable sut;            // System-Under-Test
+    private Testable sut;   // System Under Test
 
     @Before
     public void setUp() {
         sut = new Testable();
     }
 
+    // ---------------------------------------------------------------------
+    //  TEST: isHiveForced()
+    // ---------------------------------------------------------------------
     @Test
-    public void from_returnsExpectedStagingSelect() {
-        // --- Arrange ------------------------------------------------------
-        Feed feed = mock(Feed.class);
-        when(feed.getFunctionalName()).thenReturn("orders_cur");
+    public void isHiveForced_shouldReturnTrue() {
+        assertEquals(true, sut.isHiveForced());
+    }
+
+    // ---------------------------------------------------------------------
+    //  TEST: create(feed)
+    // ---------------------------------------------------------------------
+    @Test
+    public void create_buildsExpectedAlterViewStatement() {
+        // Arrange
+        Feed feed = mock(Feed.class);          // no es necesario stubbear nada
 
         String expected =
-            SQLConstants.FROM + SQLConstants.STAGING_DATABASE + ".orders_cur";
+            new StringBuilder()
+                .append(SQLConstants.USE_DATABASE)
+                .append(SQLConstants.RAW_SANITED_DATABASE)
+                .append(SQLConstants.QUERY_SEPARATOR)
+                .append(SQLConstants.ALTER_VIEW)
+                .append("vw_raw_sanitized_orders")   // lo retorna la sub-clase Testable
+                .append(SQLConstants.AS)
+                .toString();
 
-        // --- Act ----------------------------------------------------------
-        String actual = sut.callFrom(feed);
+        // Act
+        String actual = sut.callCreate(feed);
 
-        // --- Assert -------------------------------------------------------
+        // Assert
         assertEquals(expected, actual);
     }
 }
-
