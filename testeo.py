@@ -1,56 +1,40 @@
+@RunWith(MockitoJUnitRunner.class)
 public class SelectCheckFatalVFTest {
 
-    private static class TestableSelectCheckFatalVF extends SelectCheckFatalVF {
-        @Override
-        public String build(SessionWrapper session, Execution execution) {
-            // Puedes hacer override aquí si necesitas controlar el entorno del test
-            return super.build(session, execution);
-        }
-
-        // Acceso público a métodos protegidos para test
-        public String callSelect(Feed feed, List<Field> fields, String... args) throws Exception {
-            return select(feed, fields, args);
-        }
-
-        public String callFrom(Feed feed) {
-            return from(feed);
-        }
-
-        public String callWhere(Feed feed, PartitionsHandler handler) {
-            return where(feed, handler);
-        }
+    /** Subclase solo para exponer los métodos protected */
+    private static class Testable extends SelectCheckFatalVF {
+        String callSelect(Feed f, List<Field> fs, String... args) throws Exception { return select(f, fs, args); }
+        String callFrom(Feed f)                                { return from(f); }
+        String callWhere(Feed f, PartitionsHandler p)          { return where(f, p); }
     }
 
-    private TestableSelectCheckFatalVF component;
+    private final Testable sut = new Testable();
 
-    @Before
-    public void setup() {
-        component = new TestableSelectCheckFatalVF();
+    @Test
+    public void projectionList_shouldContainMSG() {
+        assertEquals(Collections.singletonList("MSG"), sut.getProjectionList());
     }
 
     @Test
-    public void testGetProjectionList() {
-        List<String> projection = component.getProjectionList();
-        assertEquals(Collections.singletonList("MSG"), projection);
+    public void select_from_where_returnEmptyString() throws Exception {
+        Feed feed = Mockito.mock(Feed.class);
+        PartitionsHandler ph = Mockito.mock(PartitionsHandler.class);
+        assertEquals("", sut.callSelect(feed, Collections.emptyList()));
+        assertEquals("", sut.callFrom(feed));
+        assertEquals("", sut.callWhere(feed, ph));
     }
 
     @Test
-    public void testSelectReturnsExpectedString() throws Exception {
-        Feed mockFeed = mock(Feed.class);
-        List<Field> mockFields = Collections.emptyList();
-        assertEquals("", component.callSelect(mockFeed, mockFields));
-    }
+    public void build_mustContainPlaceholders() throws Exception {
+        SessionWrapper session = Mockito.mock(SessionWrapper.class);
+        Execution       exec   = Mockito.mock(Execution.class);
 
-    @Test
-    public void testFromReturnsExpectedString() {
-        Feed mockFeed = mock(Feed.class);
-        assertEquals("", component.callFrom(mockFeed));
-    }
+        String sql = sut.build(session, exec);
 
-    @Test
-    public void testWhereReturnsExpectedString() {
-        Feed mockFeed = mock(Feed.class);
-        PartitionsHandler mockHandler = mock(PartitionsHandler.class);
-        assertEquals("", component.callWhere(mockFeed, mockHandler));
+        assertTrue(sql.contains(SQLConstants.VAL_DATABASE));
+        assertTrue(sql.contains("${TABLE_ALERTS_VF}"));
+        assertTrue(sql.contains("${LOAD_DATE}"));
+        assertTrue(sql.contains("${EXECUTION_DATE}"));
+        assertTrue(sql.contains("${tableName}"));
     }
 }
