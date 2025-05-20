@@ -65,7 +65,9 @@ public class SQLCreateStagingTest {
 
         String result = component.callFields(mockFeed, fields);
 
-        assertTrue(result.contains("col1 STRING COMMENT 'comment 1'"));
-        assertTrue(result.contains("backup_col2 INT COMMENT 'N/A'"));
+        String compacted = result.replaceAll("\\s+", " ").trim();
+        assertTrue(compacted.contains("col1 STRING COMMENT 'comment 1'"));
+        assertTrue(compacted.contains("backup_col2 INT COMMENT 'N/A'"));
+
     }
 }
