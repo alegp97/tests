@@ -9,11 +9,18 @@ import static org.mockito.Mockito.*;
 
 public class SQLCreateStagingPartenonTest {
 
-    private SQLCreateStagingPartenon component;
+    private SQLCreateStagingPartenonWrapper component;
+
+    // Wrapper to access protected method
+    public static class SQLCreateStagingPartenonWrapper extends SQLCreateStagingPartenon {
+        public String callGetTableName(Feed feed) {
+            return super.getTableName(feed);
+        }
+    }
 
     @BeforeEach
     public void setUp() {
-        component = new SQLCreateStagingPartenon();
+        component = new SQLCreateStagingPartenonWrapper();
     }
 
     @Test
@@ -22,8 +29,9 @@ public class SQLCreateStagingPartenonTest {
         when(mockFeed.getFunctionalName()).thenReturn("transactions");
 
         String expected = SQLConstants.STAGING_DATABASE + "." + "transactions";
-        String actual = component.getTableName(mockFeed);
+        String actual = component.callGetTableName(mockFeed);
 
         assertEquals(expected, actual);
     }
 }
+
