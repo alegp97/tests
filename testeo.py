@@ -25,6 +25,22 @@ public class PartitionsHandlerTSImplTest {
         public String callBuildStringFromList(List<String> partitions, boolean typed) {
             return super.buildStringFromList(partitions, typed);
         }
+
+         public List<String> callGetListPartitionsHistInternal(Feed feed) {
+            return super.getListPartitionsHistInternal(feed);
+        }
+
+        public List<String> callGetListPartitionsPrepInternal(Feed feed) {
+            return super.getListPartitionsPrepInternal(feed);
+        }
+
+        public String callBuildStringFromList(List<String> partitions, boolean typed) {
+            return super.buildStringFromList(partitions, typed);
+        }
+
+        public String callBuildFiltersFromList(List<String> partitions, String operator, boolean asString) {
+            return super.buildFiltersFromList(partitions, operator, asString);
+        }
     }
 
 
