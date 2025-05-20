@@ -16,6 +16,18 @@ public class PartitionsHandlerTSImplTest {
 
     private PartitionsHandlerTSImpl handler;
 
+    // Wrapper público dentro del test
+    public static class PartitionsHandlerWrapper extends PartitionsHandlerTSImpl {
+        public List<String> callGetListPartitionsRawInternal() {
+            return super.getListPartitionsRawInternal();
+        }
+    
+        public String callBuildStringFromList(List<String> partitions, boolean typed) {
+            return super.buildStringFromList(partitions, typed);
+        }
+    }
+
+
     @BeforeEach
     public void setup() {
         handler = new PartitionsHandlerTSImpl();
