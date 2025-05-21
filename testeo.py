@@ -1,73 +1,24 @@
-import com.santander.supra.core.model.Feed;
-import com.santander.supra.core.model.Field;
-import com.santander.supra.core.staging.sql.SQLConstants;
-import com.santander.supra.eresearch.staging.sql.ddl.create.SQLCreateStaging;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+test("getEmisorNotificacion debe devolver null cuando no encuentra emisor") {
+  val sqlContextMock = mock[SQLContext]
+  val usersTable = mock[DataFrame]
+  val dfUsersAndRols = mock[DataFrame]
+  val userUnidad = mock[DataFrame]
 
-import java.util.Arrays;
-import java.util.List;
+  when(sqlContextMock.table("staging_db.users_ecresearch")).thenReturn(usersTable)
+  when(usersTable.where(any[Column])).thenReturn(dfUsersAndRols)
+  when(dfUsersAndRols.select(any[Seq[Column]]: _*)).thenReturn(dfUsersAndRols)
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+  when(dfUsersAndRols.col(any[String])).thenAnswer(new Answer[Column] {
+    override def answer(inv: InvocationOnMock): Column = col(inv.getArgument(0))
+  })
 
-public class SQLCreateStagingTest {
+  when(dfUsersAndRols.where(any[Column])).thenReturn(userUnidad)
+  when(userUnidad.where(any[Column])).thenReturn(userUnidad)
+  when(userUnidad.limit(anyInt())).thenReturn(userUnidad)
 
-    private SQLCreateStagingWrapper component;
+  // 🔴 Aquí el punto clave:
+  when(userUnidad.collect()).thenReturn(Array.empty[Row])
 
-    // Wrapper para exponer métodos protegidos
-    public static class SQLCreateStagingWrapper extends SQLCreateStaging {
-        public String callGetTableName(Feed feed) {
-            return super.getTableName(feed);
-        }
-
-        public String callCreate(Feed feed) {
-            return super.create(feed);
-        }
-
-        public String callFields(Feed feed, List<Field> fields) {
-            return super.fields(feed, fields);
-        }
-    }
-
-    @BeforeEach
-    public void setUp() {
-        component = new SQLCreateStagingWrapper();
-    }
-
-    @Test
-    public void testCreate_returnsExpectedCreateStatement() {
-        Feed mockFeed = mock(Feed.class);
-        when(mockFeed.getFunctionalName()).thenReturn("users");
-
-        String expected = "CREATE EXTERNAL TABLE IF NOT EXISTS " + SQLConstants.STAGING_DATABASE + ".users";
-        String actual = component.callCreate(mockFeed);
-
-        assertTrue(actual.startsWith(expected));
-    }
-
-    @Test
-    public void testFields_generatesCorrectFieldList() {
-        Feed mockFeed = mock(Feed.class);
-
-        Field f1 = mock(Field.class);
-        when(f1.getFunctionalName()).thenReturn("col1");
-        when(f1.getTypeConversion()).thenReturn("STRING");
-        when(f1.getComment()).thenReturn("comment 1");
-
-        Field f2 = mock(Field.class);
-        when(f2.getFunctionalName()).thenReturn(null);
-        when(f2.getName()).thenReturn("backup_col2");
-        when(f2.getTypeConversion()).thenReturn("INT");
-        when(f2.getComment()).thenReturn(null);
-
-        List<Field> fields = Arrays.asList(f1, f2);
-
-        String result = component.callFields(mockFeed, fields);
-
-        String compacted = result.replaceAll("\\s+", " ").trim();
-        assertTrue(compacted.contains("col1 STRING COMMENT 'comment 1'"));
-        assertTrue(compacted.contains("backup_col2 INT COMMENT 'N/A'"));
-
-    }
+  val result = NotificationUtil.getEmisorNotificacion(sqlContextMock, "staging_db", "TEST_UNIT")
+  assert(result == null)
 }
