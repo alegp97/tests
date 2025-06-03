@@ -1,18 +1,19 @@
-object BoardScenariosConstants {
-  val CurrencyExceptionCountry = "currencyExceptionTable.country"
-  val CurrencyExceptionVariable = "currencyExceptionTable.variable"
+object ScenariosConstants {
+  val UnitId = "scenarios.unit_id"
+  val EntityId = "scenarios.entity_id"
+  val Exercise = "scenarios.exercise"
+  val ScenarioVersion = "scenarios.scenario_version"
+  val ScenarioName = "scenarios.scenario_name"
+  val Country = "scenarios.country"
+}
 
-  val ScenariosTotalCountry = "scenariosTotalTable.country"
-  val ScenariosTotalVariableName = "scenariosTotalTable.variable_name"
-  val ScenariosTotalVersionId = "scenariosTotalTable.version_id"
-  val ScenariosTotalEntityId = "scenariosTotalTable.entity_id"
-  val ScenariosTotalScenarioVersion = "scenariosTotalTable.scenario_version"
-  val ScenariosTotalExercise = "scenariosTotalTable.exercise"
-  val ScenariosTotalUnitId = "scenariosTotalTable.unit_id"
+object FiltroDosMaximosConstants {
+  val ScenarioName = "filtroDosMaximos.scenario_name"
+  val VersionId = "filtroDosMaximos.version_id"
+  val Exercise = "filtroDosMaximos.exercise"
+}
 
-  val VariableChangeVersionId = "variableWithCurrencyChange.version_id"
-  val VariableChangeEntityId = "variableWithCurrencyChange.entity_id"
-  val VariableChangeScenarioVersion = "variableWithCurrencyChange.scenario_version"
-  val VariableChangeExercise = "variableWithCurrencyChange.exercise"
-  val VariableChangeUnitId = "variableWithCurrencyChange.unit_id"
+object ScenariosDFConstants {
+  val Timeline = "scenariosDF_by_unit_entity_exercise.timeline"
+  val Year = "scenariosDF_by_unit_entity_exercise.year"
 }
