@@ -44,3 +44,21 @@ test("casesQuery devuelve la lista de columnas correctamente") {
   // Assert
   assert(result.isInstanceOf[List[_]])
 }
+
+
+
+
+val dfShowPartitions = mock[DataFrame]
+val dfOrdered = mock[DataFrame]
+val dfLimited = mock[DataFrame]
+
+val maxFieldsRow = mock[Row]
+when(maxFieldsRow.getString(0)).thenReturn("partition=20240605")
+
+// Encadenar los mocks como si fueran los métodos reales
+when(sqlContextMock.sql("show partitions test_source.fields_dict"))
+  .thenReturn(dfShowPartitions)
+
+when(dfShowPartitions.orderBy(any[Column])).thenReturn(dfOrdered)
+when(dfOrdered.limit(1)).thenReturn(dfLimited)
+when(dfLimited.collect()).thenReturn(Array(maxFieldsRow))
