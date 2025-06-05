@@ -1,8 +1,8 @@
 test("casesQuery devuelve la lista de columnas correctamente") {
+  // Arrange
   val sourcedb = "test_source"
   val targetTable = "test_table"
 
-  // Mocks base
   val sparkMock = mock[SparkSession]
   val sqlContextMock = mock[SQLContext]
   val dfShowPartitions = mock[DataFrame]
@@ -12,33 +12,56 @@ test("casesQuery devuelve la lista de columnas correctamente") {
   val dfFiltered = mock[DataFrame]
   val dfSelected = mock[DataFrame]
 
-  // Mock del Row de partición
-  val maxFieldsRow = mock[Row]
-  when(maxFieldsRow.getString(0)).thenReturn("partition=20240605")
-
-  // Encadenar mocks de show partitions
+  // Mock partición: show partitions ...
+  val partitionRow = mock[Row]
+  when(partitionRow.getString(0)).thenReturn("partition=20240605")
   when(sparkMock.sqlContext).thenReturn(sqlContextMock)
   when(sqlContextMock.sql("show partitions test_source.fields_dict")).thenReturn(dfShowPartitions)
   when(dfShowPartitions.orderBy(any[Column])).thenReturn(dfOrdered)
   when(dfOrdered.limit(1)).thenReturn(dfLimited)
-  when(dfLimited.collect()).thenReturn(Array(maxFieldsRow))
+  when(dfLimited.collect()).thenReturn(Array(partitionRow))
 
-  // Mock del DataFrame de la tabla
+  // Mock tabla fields_dict y filtros
   when(sqlContextMock.table("test_source.fields_dict")).thenReturn(dfFieldsDict)
   when(dfFieldsDict.where(any[Column])).thenReturn(dfFiltered)
   when(dfFiltered.where(any[Column])).thenReturn(dfFiltered)
   when(dfFiltered.select(any[Seq[Column]]: _*)).thenReturn(dfSelected)
 
-  // Este es el Row con schema necesario para getAs("fld_name")
+  // Crear schema con todas las columnas necesarias
   val schema = StructType(List(
-    StructField("fld_name", StringType, nullable = false)
+    StructField("fld_name", StringType, false),
+    StructField("src_fld_header", StringType, true),
+    StructField("src_data_dim1", StringType, true),
+    StructField("src_data_dim1_value", DecimalType(38, 23), true),
+    StructField("calculation_method", StringType, true),
+    StructField("src_data_dim2", StringType, true),
+    StructField("src_data_dim2_value", DecimalType(38, 23), true),
+    StructField("src_data_dim3", StringType, true),
+    StructField("src_data_dim3_value", DecimalType(38, 23), true),
+    StructField("src_data_dim4", StringType, true),
+    StructField("src_data_dim4_value", DecimalType(38, 23), true),
+    StructField("src_data_dim5", StringType, true),
+    StructField("src_data_dim5_value", DecimalType(38, 23), true)
   ))
 
-  val row = new GenericRowWithSchema(Array("mocked_dim1"), schema)
+  // Fila de prueba compatible con el schema
+  val row: Row = new GenericRowWithSchema(
+    Array[AnyRef](
+      "dim1",          // fld_name
+      "header1",       // src_fld_header
+      "value1",        // src_data_dim1
+      BigDecimal("1.0"), // src_data_dim1_value
+      "calc",          // calculation_method
+      "v2", BigDecimal("2.0"),
+      "v3", BigDecimal("3.0"),
+      "v4", BigDecimal("4.0"),
+      "v5", BigDecimal("5.0")
+    ), schema
+  )
 
   when(dfSelected.collect()).thenReturn(Array(row))
 
-  // Mock del método final de utilidad si hace falta
+  // Mock del método de utilidad si no es llamado internamente
   object BoardGenericUtil {
     def buildCasesWithLikeQuery(rows: Array[Row]): Column = lit("mocked_column")
   }
@@ -48,4 +71,5 @@ test("casesQuery devuelve la lista de columnas correctamente") {
 
   // Assert
   assert(result.isInstanceOf[List[_]])
+  assert(result.nonEmpty)
 }
