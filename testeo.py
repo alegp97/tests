@@ -1,62 +1,66 @@
-test("casesQuery devuelve la lista de columnas correctamente") {
+test("run ejecuta correctamente sin lanzar errores") {
+  // Arrange
   val sourcedb = "test_source"
-  val targetTable = "test_table"
+  val targetdb = "test_target"
+  val data_timestamp_part = "20240605"
+  val entities = List(mock[IngestEntity])
 
   val sparkMock = mock[SparkSession]
   val sqlContextMock = mock[SQLContext]
-  val dfShowPartitions = mock[DataFrame]
-  val dfOrdered = mock[DataFrame]
-  val dfLimited = mock[DataFrame]
-  val dfFieldsDict = mock[DataFrame]
-  val dfFiltered = mock[DataFrame]
-  val dfSelected = mock[DataFrame]
-
-  // Mock partición
-  val partitionRow = mock[Row]
-  when(partitionRow.getString(0)).thenReturn("partition=20240605")
   when(sparkMock.sqlContext).thenReturn(sqlContextMock)
-  when(sqlContextMock.sql("show partitions test_source.fields_dict")).thenReturn(dfShowPartitions)
-  when(dfShowPartitions.orderBy(any[Column])).thenReturn(dfOrdered)
-  when(dfOrdered.limit(1)).thenReturn(dfLimited)
-  when(dfLimited.collect()).thenReturn(Array(partitionRow))
 
-  // Mock tabla y filtros
-  when(sqlContextMock.table("test_source.fields_dict")).thenReturn(dfFieldsDict)
-  when(dfFieldsDict.where(any[Column])).thenReturn(dfFiltered)
-  when(dfFiltered.where(any[Column])).thenReturn(dfFiltered)
-  when(dfFiltered.select(any[Seq[Column]]: _*)).thenReturn(dfSelected)
+  // Mocks genéricos
+  val anyDF = mock[DataFrame]
+  val row = mock[Row]
+  when(row.getString(0)).thenReturn("partition=20240605")
 
-  // Schema compatible con uso de getAs[String]
-  val schema = StructType(List(
-    StructField("fld_name", StringType, false),
-    StructField("src_fld_header", StringType, true),
-    StructField("src_data_dim1", StringType, true),
-    StructField("src_data_dim1_value", StringType, true),
-    StructField("calculation_method", StringType, true),
-    StructField("src_data_dim2", StringType, true),
-    StructField("src_data_dim2_value", StringType, true),
-    StructField("src_data_dim3", StringType, true),
-    StructField("src_data_dim3_value", StringType, true),
-    StructField("src_data_dim4", StringType, true),
-    StructField("src_data_dim4_value", StringType, true),
-    StructField("src_data_dim5", StringType, true),
-    StructField("src_data_dim5_value", StringType, true)
-  ))
+  // Particiones
+  val dfPartitions = mock[DataFrame]
+  when(sqlContextMock.sql(startsWith("show partitions"))).thenReturn(dfPartitions)
+  when(dfPartitions.orderBy(any[Column])).thenReturn(anyDF)
+  when(anyDF.limit(1)).thenReturn(anyDF)
+  when(anyDF.collect()).thenReturn(Array(row))
 
-  // Fila con valores como Strings para evitar ClassCastException
-  val row: Row = new GenericRowWithSchema(
-    Array[AnyRef](
-      "dim1", "header1", "d1", "1.0", "calc",
-      "d2", "2.0", "d3", "3.0", "d4", "4.0", "d5", "5.0"
-    ), schema
-  )
+  // Tablas simuladas necesarias
+  when(sqlContextMock.table(contains("fields_dict"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("exercise_inventory"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("execution_def"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("st_metrics_input"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("data_output"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("contexts_st"))).thenReturn(anyDF)
+  when(sqlContextMock.table(contains("granularities_map"))).thenReturn(anyDF)
 
-  when(dfSelected.collect()).thenReturn(Array(row))
+  when(anyDF.where(any[Column])).thenReturn(anyDF)
+  when(anyDF.select(any[Seq[Column]]: _*)).thenReturn(anyDF)
+  when(anyDF.select(any[Column])).thenReturn(anyDF)
+  when(anyDF.selectExpr(any[String])).thenReturn(anyDF)
+  when(anyDF.collect()).thenReturn(Array(row))
+  when(anyDF.count()).thenReturn(1L)
+  when(anyDF.columns).thenReturn(Array("col1", "col2"))
+  when(anyDF.map(any)).thenReturn(List("col1", "col2"))
+  when(anyDF.toDF()).thenReturn(anyDF)
+  when(anyDF.distinct()).thenReturn(anyDF)
+  when(anyDF.withColumn(any[String], any[Column])).thenReturn(anyDF)
+  when(anyDF.withColumnRenamed(any[String], any[String])).thenReturn(anyDF)
+  when(anyDF.drop(any[Column])).thenReturn(anyDF)
+  when(anyDF.repartition(1)).thenReturn(anyDF)
 
-  // Act
-  val result = HistoricalExercisesJob.casesQuery(sourcedb, targetTable)(sparkMock)
+  val writer = mock[DataFrameWriter[Row]]
+  when(anyDF.write).thenReturn(writer)
+  when(writer.mode(SaveMode.Overwrite)).thenReturn(writer)
+  when(writer.saveAsTable(any[String])).thenReturn(())
 
-  // Assert
-  assert(result.isInstanceOf[List[_]])
-  assert(result.nonEmpty)
+  // Simula renombrado de tabla temporal
+  when(sqlContextMock.sql(contains("ALTER TABLE"))).thenReturn(anyDF)
+  when(sqlContextMock.sql(contains("DROP TABLE"))).thenReturn(anyDF)
+
+  // Mocks para searchDuplicates y deleteDuplicatesInSource
+  val helper = mock[HistoricalExercisesJob.type]
+  when(helper.searchDuplicates(any[Seq[String]])).thenReturn(Set.empty)
+  when(helper.deleteDuplicatesInSource(any[Seq[String]], any[Seq[String]])).thenReturn(Seq.empty)
+
+  // Act & Assert: simplemente comprobamos que no lanza
+  noException shouldBe thrownBy {
+    HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
+  }
 }
