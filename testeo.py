@@ -9,58 +9,48 @@ test("run ejecuta correctamente sin lanzar errores") {
   val sqlContextMock = mock[SQLContext]
   when(sparkMock.sqlContext).thenReturn(sqlContextMock)
 
-  // Mocks genéricos
-  val anyDF = mock[DataFrame]
+  val dummyDF = mock[DataFrame]
   val row = mock[Row]
   when(row.getString(0)).thenReturn("partition=20240605")
 
-  // Particiones
-  val dfPartitions = mock[DataFrame]
-  when(sqlContextMock.sql(startsWith("show partitions"))).thenReturn(dfPartitions)
-  when(dfPartitions.orderBy(any[Column])).thenReturn(anyDF)
-  when(anyDF.limit(1)).thenReturn(anyDF)
-  when(anyDF.collect()).thenReturn(Array(row))
+  // show partitions
+  val partitionsDF = mock[DataFrame]
+  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.eq(s"show partitions $sourcedb.fields_dict")))
+    .thenReturn(partitionsDF)
+  when(partitionsDF.orderBy(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
+  when(dummyDF.limit(1)).thenReturn(dummyDF)
+  when(dummyDF.collect()).thenReturn(Array(row))
 
-  // Tablas simuladas necesarias
-  when(sqlContextMock.table(contains("fields_dict"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("exercise_inventory"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("execution_def"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("st_metrics_input"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("data_output"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("contexts_st"))).thenReturn(anyDF)
-  when(sqlContextMock.table(contains("granularities_map"))).thenReturn(anyDF)
+  // mocks comunes para todas las tablas
+  when(sqlContextMock.table(org.mockito.ArgumentMatchers.any[String])).thenReturn(dummyDF)
+  when(dummyDF.where(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
+  when(dummyDF.select(org.mockito.Matchers.any[Seq[Column]]: _*)).thenReturn(dummyDF)
+  when(dummyDF.select(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
+  when(dummyDF.selectExpr(org.mockito.Matchers.any[String])).thenReturn(dummyDF)
+  when(dummyDF.collect()).thenReturn(Array(row))
+  when(dummyDF.count()).thenReturn(1L)
+  when(dummyDF.columns).thenReturn(Array("col1", "col2"))
+  when(dummyDF.distinct()).thenReturn(dummyDF)
+  when(dummyDF.withColumn(org.mockito.Matchers.any[String], org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
+  when(dummyDF.withColumnRenamed(org.mockito.Matchers.any[String], org.mockito.Matchers.any[String])).thenReturn(dummyDF)
+  when(dummyDF.drop(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
+  when(dummyDF.repartition(1)).thenReturn(dummyDF)
+  when(dummyDF.toDF()).thenReturn(dummyDF)
+  when(dummyDF.map(org.mockito.Matchers.any())).thenReturn(dummyDF)
 
-  when(anyDF.where(any[Column])).thenReturn(anyDF)
-  when(anyDF.select(any[Seq[Column]]: _*)).thenReturn(anyDF)
-  when(anyDF.select(any[Column])).thenReturn(anyDF)
-  when(anyDF.selectExpr(any[String])).thenReturn(anyDF)
-  when(anyDF.collect()).thenReturn(Array(row))
-  when(anyDF.count()).thenReturn(1L)
-  when(anyDF.columns).thenReturn(Array("col1", "col2"))
-  when(anyDF.map(any)).thenReturn(List("col1", "col2"))
-  when(anyDF.toDF()).thenReturn(anyDF)
-  when(anyDF.distinct()).thenReturn(anyDF)
-  when(anyDF.withColumn(any[String], any[Column])).thenReturn(anyDF)
-  when(anyDF.withColumnRenamed(any[String], any[String])).thenReturn(anyDF)
-  when(anyDF.drop(any[Column])).thenReturn(anyDF)
-  when(anyDF.repartition(1)).thenReturn(anyDF)
+  // .write y .saveAsTable simulados
+  val writer = mock[org.apache.spark.sql.DataFrameWriter[Row]]
+  when(dummyDF.write).thenReturn(writer)
+  when(writer.mode("overwrite")).thenReturn(writer)
+  when(writer.saveAsTable(org.mockito.Matchers.any[String])).thenReturn(())
 
-  val writer = mock[DataFrameWriter[Row]]
-  when(anyDF.write).thenReturn(writer)
-  when(writer.mode(SaveMode.Overwrite)).thenReturn(writer)
-  when(writer.saveAsTable(any[String])).thenReturn(())
+  // ALTER y DROP TABLE
+  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.argThat((s: String) => s.startsWith("ALTER TABLE")))).thenReturn(dummyDF)
+  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.argThat((s: String) => s.startsWith("DROP TABLE")))).thenReturn(dummyDF)
 
-  // Simula renombrado de tabla temporal
-  when(sqlContextMock.sql(contains("ALTER TABLE"))).thenReturn(anyDF)
-  when(sqlContextMock.sql(contains("DROP TABLE"))).thenReturn(anyDF)
+  // Act
+  HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
 
-  // Mocks para searchDuplicates y deleteDuplicatesInSource
-  val helper = mock[HistoricalExercisesJob.type]
-  when(helper.searchDuplicates(any[Seq[String]])).thenReturn(Set.empty)
-  when(helper.deleteDuplicatesInSource(any[Seq[String]], any[Seq[String]])).thenReturn(Seq.empty)
-
-  // Act & Assert: simplemente comprobamos que no lanza
-  noException shouldBe thrownBy {
-    HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
-  }
+  // Assert implícito: si llega aquí sin excepción, pasa
+  assert(true)
 }
