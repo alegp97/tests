@@ -1,34 +1,60 @@
-private Table buildErrorTable(String tableName,
-                              Execution execution,
-                              Session session,
-                              Connection con,
-                              String query) throws Exception {
+public final class WorkbookStyleManager {
 
-    Table table_vf = new Table(tableName);
+    private static final String FONT = "Arial";
 
-    List<Map<String, Object>> errorRows =
-        JDBCExecutorHandler.getInstance()
-                            .launchQueriesAndGetRows(execution, session, con, query,
-                                                     /*isCritical*/ true, /*isTracing*/ false);
-
-    if (errorRows.isEmpty()) {
-        logger.info("LaunchQueriesAndGetRows: errorRows.isEmpty");
+    private WorkbookStyleManager() {
+        throw new IllegalAccessError("Non-instantiable class.");
     }
 
-    for (Map<String, Object> row : errorRows) {
-        String type       = (String) row.get(K.TIPO_ERROR);
-        String columnName = (String) row.get(K.COLUMNA_ORIGEN);
-        table_vf.addCampo(type, columnName);
+    public static XSSFCellStyle getTitleStyle(XSSFWorkbook wb) {
+        XSSFCellStyle styleTitle = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setFontName(FONT);
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 10);
+        font.setColor(HSSFColor.BLACK.index);
+
+        styleTitle.setFont(font);
+        styleTitle.setAlignment(HorizontalAlignment.CENTER);
+        return styleTitle;
     }
-    return table_vf;
+
+    public static XSSFCellStyle getHeaderStyle(XSSFWorkbook wb) {
+        XSSFCellStyle styleHeader = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setFontName(FONT);
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 10);
+        font.setColor(HSSFColor.WHITE.index);
+
+        styleHeader.setFont(font);
+        BorderStyle thin = BorderStyle.THIN;
+        short black = IndexedColors.BLACK.getIndex();
+        styleHeader.setBorderRight(thin);  styleHeader.setRightBorderColor(black);
+        styleHeader.setBorderBottom(thin); styleHeader.setBottomBorderColor(black);
+        styleHeader.setBorderLeft(thin);   styleHeader.setLeftBorderColor(black);
+        styleHeader.setBorderTop(thin);    styleHeader.setTopBorderColor(black);
+        styleHeader.setAlignment(HorizontalAlignment.CENTER);
+        styleHeader.setFillForegroundColor(IndexedColors.RED.getIndex());
+        styleHeader.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return styleHeader;
+    }
+
+    public static XSSFCellStyle getRegularStyle(XSSFWorkbook wb) {
+        XSSFCellStyle styleRegular = wb.createCellStyle();
+        XSSFFont font = wb.createFont();
+        font.setFontName(FONT);
+        font.setFontHeightInPoints((short) 10);
+        font.setColor(HSSFColor.BLACK.index);
+
+        styleRegular.setFont(font);
+        BorderStyle thin = BorderStyle.THIN;
+        short black = IndexedColors.BLACK.getIndex();
+        styleRegular.setBorderRight(thin);  styleRegular.setRightBorderColor(black);
+        styleRegular.setBorderBottom(thin); styleRegular.setBottomBorderColor(black);
+        styleRegular.setBorderLeft(thin);   styleRegular.setLeftBorderColor(black);
+        styleRegular.setBorderTop(thin);    styleRegular.setTopBorderColor(black);
+        styleRegular.setAlignment(HorizontalAlignment.CENTER);
+        return styleRegular;
+    }
 }
-
-
-
-try (Connection con = JDBCHandler.getConnection(JDBCHandler.HIVE)) {
-    return buildErrorTable(tableName, execution, session, con, query);
-} catch (Exception e) {                         // cubre SQLException + otras
-    throw new EconomicResearchException(e.getMessage(), e);
-}
-
-
