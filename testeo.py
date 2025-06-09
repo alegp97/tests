@@ -5,89 +5,56 @@ private void procesos(final String data_date_part,
                       final List<String> tables,
                       final Statement st) throws SQLException {
 
-    /* ---------- Sanitización mínima (una línea por parámetro externo) ---------- */
-    final String datePartSafe   = StringEscapeUtils.escapeSql(data_date_part);
-    final String timePartSafe   = StringEscapeUtils.escapeSql(data_timestamp_part);
-    final String feedSafe       = StringEscapeUtils.escapeSql(process_table);
-    final String stateSafe      = StringEscapeUtils.escapeSql(state);
+    Connection conn = st.getConnection();               // ← única línea nueva antes del primer SQL
 
-    /* ---------- (1) SELECT max(id)  ─ igual que antes pero con vars *_Safe ---------- */
-    String queryId = "select max(id) as id "
-                   + "from process_sr_cloud "
-                   + "where status='0' "
-                   + "and data_date_part='"   + datePartSafe + "' "
-                   + "and data_timestamp_part='" + timePartSafe + "' "
-                   + "and feed='"            + feedSafe + "'";
-
-    ResultSet rs = st.executeQuery(queryId);
-    logger.info("[ER] - Executed query to obtain id : {}", queryId);
+    /* ---------- 1) SELECT max(id) ---------- */
+    final String selSql =
+        "SELECT max(id) AS id "
+      + "FROM process_sr_cloud "
+      + "WHERE status = ? "
+      + "AND data_date_part = ? "
+      + "AND data_timestamp_part = ? "
+      + "AND feed = ?";
 
     int id = 0;
-    if (rs.next()) { id = rs.getInt("id"); }
+    try (PreparedStatement psSel = conn.prepareStatement(selSql)) {
+        psSel.setString(1, "0");
+        psSel.setString(2, data_date_part);
+        psSel.setString(3, data_timestamp_part);
+        psSel.setString(4, process_table);
 
-    /* ---------- (2) UPDATE status  ─ solo sanitizar 'state' ---------- */
-    String updateStatus = "update process_sr_cloud set status='" + stateSafe
-                        + "', ts_end=now() where id='" + id + "'";
-    st.execute(updateStatus);
-    logger.info("[ER] - Executed query to update status : {}", updateStatus);
-
-    /* ---------- (3) UPDATE por cada tabla  ─ sanitizar 't' ---------- */
-    for (String t : tables) {
-        String tableSafe = StringEscapeUtils.escapeSql(t);
-
-        String updateQuery = "update ingestas_sr_cloud set id_process_sr='" + id + "' "
-                           + "where pid=(select pid from ingestas_sr_cloud "
-                           + "where id=(select max(id) from ingestas_sr_cloud "
-                           + "where status!='3' and feed='" + tableSafe + "') "
-                           + "and id_process_sr is null)";
-        st.execute(updateQuery);
-        logger.info("[ER] - Executed query to link ingest : {}", updateQuery);
+        try (ResultSet rs = psSel.executeQuery()) {
+            while (rs.next()) { id = rs.getInt("id"); }
+        }
     }
-}
 
+    /* ---------- 2) UPDATE status ---------- */
+    final String updStatusSql =
+        "UPDATE process_sr_cloud "
+      + "SET status = ?, ts_end = now() "
+      + "WHERE id = ?";
 
+    try (PreparedStatement psUpd = conn.prepareStatement(updStatusSql)) {
+        psUpd.setString(1, state);
+        psUpd.setInt(2, id);
+        psUpd.executeUpdate();
+    }
 
+    /* ---------- 3) UPDATE ingestas_sr_cloud para cada tabla ---------- */
+    final String updIngestSql =
+        "UPDATE ingestas_sr_cloud SET id_process_sr = ? "
+      + "WHERE pid = ( "
+      +   "SELECT pid FROM ingestas_sr_cloud "
+      +   "WHERE id = (SELECT max(id) "
+      +                "FROM ingestas_sr_cloud "
+      +                "WHERE status != '3' AND feed = ?) "
+      +   "AND id_process_sr IS NULL)";
 
-private void bloque(final String data_date_part,
-                    final String data_timestamp_part,
-                    final String state,
-                    final List<String> tables,
-                    final Statement st) throws SQLException {
-
-    /* ---------- Sanitización mínima ---------- */
-    final String datePartSafe  = StringEscapeUtils.escapeSql(data_date_part);
-    final String timePartSafe  = StringEscapeUtils.escapeSql(data_timestamp_part);
-    final String stateSafe     = StringEscapeUtils.escapeSql(state);
-
-    /* ---------- (1) SELECT max(id) ---------- */
-    String queryId = "select max(id) as id "
-                   + "from bloques_sr_cloud "
-                   + "where status='0' "
-                   + "and data_date_part='"   + datePartSafe + "' "
-                   + "and data_timestamp_part='" + timePartSafe + "'";
-
-    ResultSet rs = st.executeQuery(queryId);
-    logger.info("[ER] - Executed query to obtain id : {}", queryId);
-
-    int id = 0;
-    if (rs.next()) { id = rs.getInt("id"); }
-
-    /* ---------- (2) UPDATE status ---------- */
-    String updateStatus = "update bloques_sr_cloud set status='" + stateSafe
-                        + "', ts_end=now() where id='" + id + "'";
-    st.execute(updateStatus);
-    logger.info("[ER] - Executed query to update status : {}", updateStatus);
-
-    /* ---------- (3) UPDATE por cada tabla ---------- */
-    for (String t : tables) {
-        String tableSafe = StringEscapeUtils.escapeSql(t);
-
-        String updateQuery = "update ingestas_sr_cloud set id_bloque_sr='" + id + "' "
-                           + "where pid=(select pid from ingestas_sr_cloud "
-                           + "where id=(select max(id) from ingestas_sr_cloud "
-                           + "where status!='3' and feed='" + tableSafe + "') "
-                           + "and id_bloque_sr is null)";
-        st.execute(updateQuery);
-        logger.info("[ER] - Executed query to link ingest : {}", updateQuery);
+    try (PreparedStatement psIngest = conn.prepareStatement(updIngestSql)) {
+        psIngest.setInt(1, id);
+        for (String t : tables) {
+            psIngest.setString(2, t);
+            psIngest.executeUpdate();
+        }
     }
 }
