@@ -1,105 +1,129 @@
-private void procesos(final String data_date_part, final String data_timestamp_part,
-                      final String process_table, final String state,
-                      final List<String> tables, final Connection conn) throws SQLException {
+private void procesos(final String data_date_part,
+                      final String data_timestamp_part,
+                      final String process_table,
+                      final String state,
+                      final List<String> tables,
+                      final Statement st)                     // ← se conserva
+                      throws SQLException {
 
-    String query = "SELECT max(id) as id FROM process_sr_cloud " +
-                   "WHERE status = ? AND data_date_part = ? AND data_timestamp_part = ? AND feed = ?";
-    try (PreparedStatement ps = conn.prepareStatement(query)) {
-        ps.setString(1, "0");
-        ps.setString(2, data_date_part);
-        ps.setString(3, data_timestamp_part);
-        ps.setString(4, process_table);
+    /* ---------- SELECT max(id) ---------- */
+    Connection conn   = st.getConnection();                  // ← obtenemos la conexión del Statement
+    String selSql     = "SELECT MAX(id) AS id "
+                      + "FROM process_sr_cloud "
+                      + "WHERE status = '0' "
+                      + "AND data_date_part = ? "
+                      + "AND data_timestamp_part = ? "
+                      + "AND feed = ?";
 
-        try (ResultSet rs = ps.executeQuery()) {
-            logger.info("[ER] - Executed query to obtain id : " + query);
+    int id = 0;
+    try (PreparedStatement psSel = conn.prepareStatement(selSql)) {
+        psSel.setString(1, data_date_part);
+        psSel.setString(2, data_timestamp_part);
+        psSel.setString(3, process_table);
 
-            int id = 0;
+        try (ResultSet rs = psSel.executeQuery()) {
             if (rs.next()) {
                 id = rs.getInt("id");
             }
-
-            String updateStatusSql = "UPDATE process_sr_cloud SET status = ?, ts_end = now() WHERE id = ?";
-            try (PreparedStatement updatePs = conn.prepareStatement(updateStatusSql)) {
-                updatePs.setString(1, state);
-                updatePs.setInt(2, id);
-                updatePs.executeUpdate();
-                logger.info("[ER] - Executed query to update status");
-            }
-
-            String updateIngestSql = "UPDATE ingestas_sr_cloud SET id_process_sr = ? " +
-                                     "WHERE pid = (SELECT pid FROM ingestas_sr_cloud " +
-                                     "WHERE id = (SELECT max(id) FROM ingestas_sr_cloud WHERE status != '3' AND feed = ?) " +
-                                     "AND id_process_sr IS NULL)";
-
-            for (String t : tables) {
-                try (PreparedStatement updateIngestPs = conn.prepareStatement(updateIngestSql)) {
-                    updateIngestPs.setInt(1, id);
-                    updateIngestPs.setString(2, t);
-                    updateIngestPs.executeUpdate();
-                    logger.info("[ER] - Executed query to update ingest process id for table: " + t);
-                }
-            }
         }
-    } catch (SQLException e) {
-        logger.error(e.getMessage(), e);
-        throw e;
+    }
+
+    /* ---------- UPDATE process_sr_cloud (status) ---------- */
+    String updStatusSql = "UPDATE process_sr_cloud "
+                        + "SET status = ?, ts_end = NOW() "
+                        + "WHERE id = ?";
+
+    try (PreparedStatement psUpd = conn.prepareStatement(updStatusSql)) {
+        psUpd.setString(1, state);
+        psUpd.setInt(2, id);
+        psUpd.executeUpdate();
+    }
+
+    /* ---------- UPDATE ingestas_sr_cloud (loop por tablas) ---------- */
+    String updIngestSql = "UPDATE ingestas_sr_cloud "
+                        + "SET id_process_sr = ? "
+                        + "WHERE pid = ("
+                        +   "SELECT pid "
+                        +   "FROM ingestas_sr_cloud "
+                        +   "WHERE id = ("
+                        +       "SELECT MAX(id) "
+                        +       "FROM ingestas_sr_cloud "
+                        +       "WHERE status != '3' AND feed = ?"
+                        +   ") "
+                        +   "AND id_process_sr IS NULL"
+                        + ")";
+
+    try (PreparedStatement psIngest = conn.prepareStatement(updIngestSql)) {
+        psIngest.setInt(1, id);
+        for (String t : tables) {
+            psIngest.setString(2, t);
+            psIngest.executeUpdate();
+        }
     }
 }
 
 
 
 
+private void bloque(final String data_date_part,
+                    final String data_timestamp_part,
+                    final String state,
+                    final List<String> tables,
+                    final Statement st)                       // ← se conserva
+                    throws SQLException {
 
+    /* ---------- SELECT max(id) ---------- */
+    Connection conn   = st.getConnection();
+    String selSql     = "SELECT MAX(id) AS id "
+                      + "FROM bloques_sr_cloud "
+                      + "WHERE status = '0' "
+                      + "AND data_date_part = ? "
+                      + "AND data_timestamp_part = ?";
 
+    int id = 0;
+    try (PreparedStatement psSel = conn.prepareStatement(selSql)) {
+        psSel.setString(1, data_date_part);
+        psSel.setString(2, data_timestamp_part);
 
-
-
-
-
-
-private void bloque(final String data_date_part, final String data_timestamp_part,
-                    final String state, final List<String> tables, final Connection conn) throws SQLException {
-
-    String query = "SELECT max(id) as id FROM bloques_sr_cloud " +
-                   "WHERE status = ? AND data_date_part = ? AND data_timestamp_part = ?";
-    try (PreparedStatement ps = conn.prepareStatement(query)) {
-        ps.setString(1, "0");
-        ps.setString(2, data_date_part);
-        ps.setString(3, data_timestamp_part);
-
-        try (ResultSet rs = ps.executeQuery()) {
-            logger.info("[ER] - Executed query to obtain id : " + query);
-
-            int id = 0;
+        try (ResultSet rs = psSel.executeQuery()) {
             if (rs.next()) {
                 id = rs.getInt("id");
             }
-
-            String updateStatusSql = "UPDATE bloques_sr_cloud SET status = ?, ts_end = now() WHERE id = ?";
-            try (PreparedStatement updatePs = conn.prepareStatement(updateStatusSql)) {
-                updatePs.setString(1, state);
-                updatePs.setInt(2, id);
-                updatePs.executeUpdate();
-                logger.info("[ER] - Executed query to update status");
-            }
-
-            String updateIngestSql = "UPDATE ingestas_sr_cloud SET id_bloque_sr = ? " +
-                                     "WHERE pid = (SELECT pid FROM ingestas_sr_cloud " +
-                                     "WHERE id = (SELECT max(id) FROM ingestas_sr_cloud WHERE status != '3' AND feed = ?) " +
-                                     "AND id_bloque_sr IS NULL)";
-
-            for (String t : tables) {
-                try (PreparedStatement updateIngestPs = conn.prepareStatement(updateIngestSql)) {
-                    updateIngestPs.setInt(1, id);
-                    updateIngestPs.setString(2, t);
-                    updateIngestPs.executeUpdate();
-                    logger.info("[ER] - Executed query to update ingest process id for table: " + t);
-                }
-            }
         }
-    } catch (SQLException e) {
-        logger.error(e.getMessage(), e);
-        throw e;
+    }
+
+    /* ---------- UPDATE bloques_sr_cloud (status) ---------- */
+    String updStatusSql = "UPDATE bloques_sr_cloud "
+                        + "SET status = ?, ts_end = NOW() "
+                        + "WHERE id = ?";
+
+    try (PreparedStatement psUpd = conn.prepareStatement(updStatusSql)) {
+        psUpd.setString(1, state);
+        psUpd.setInt(2, id);
+        psUpd.executeUpdate();
+    }
+
+    /* ---------- UPDATE ingestas_sr_cloud (loop por tablas) ---------- */
+    String updIngestSql = "UPDATE ingestas_sr_cloud "
+                        + "SET id_bloque_sr = ? "
+                        + "WHERE pid = ("
+                        +   "SELECT pid "
+                        +   "FROM ingestas_sr_cloud "
+                        +   "WHERE id = ("
+                        +       "SELECT MAX(id) "
+                        +       "FROM ingestas_sr_cloud "
+                        +       "WHERE status != '3' AND feed = ?"
+                        +   ") "
+                        +   "AND id_bloque_sr IS NULL"
+                        + ")";
+
+    try (PreparedStatement psIngest = conn.prepareStatement(updIngestSql)) {
+        psIngest.setInt(1, id);
+        for (String t : tables) {
+            psIngest.setString(2, t);
+            psIngest.executeUpdate();
+        }
     }
 }
+
 
