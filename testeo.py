@@ -26,8 +26,6 @@ private static List<Detail> processDetailRows(Execution execution,
     return details;
 }
 
-
-
 public static void generateDetailedTable(String sqlStatement,
                                          Table table,
                                          XSSFWorkbook wb,
@@ -86,4 +84,5 @@ public static void generateDetailedTable(String sqlStatement,
         throw new EconomicResearchException(e.getMessage(), e);
     }
 }
+
 
