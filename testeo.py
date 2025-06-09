@@ -1,56 +1,105 @@
-test("run ejecuta correctamente sin lanzar errores") {
-  // Arrange
-  val sourcedb = "test_source"
-  val targetdb = "test_target"
-  val data_timestamp_part = "20240605"
-  val entities = List(mock[IngestEntity])
+private void procesos(final String data_date_part, final String data_timestamp_part,
+                      final String process_table, final String state,
+                      final List<String> tables, final Connection conn) throws SQLException {
 
-  val sparkMock = mock[SparkSession]
-  val sqlContextMock = mock[SQLContext]
-  when(sparkMock.sqlContext).thenReturn(sqlContextMock)
+    String query = "SELECT max(id) as id FROM process_sr_cloud " +
+                   "WHERE status = ? AND data_date_part = ? AND data_timestamp_part = ? AND feed = ?";
+    try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setString(1, "0");
+        ps.setString(2, data_date_part);
+        ps.setString(3, data_timestamp_part);
+        ps.setString(4, process_table);
 
-  val dummyDF = mock[DataFrame]
-  val row = mock[Row]
-  when(row.getString(0)).thenReturn("partition=20240605")
+        try (ResultSet rs = ps.executeQuery()) {
+            logger.info("[ER] - Executed query to obtain id : " + query);
 
-  // show partitions
-  val partitionsDF = mock[DataFrame]
-  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.eq(s"show partitions $sourcedb.fields_dict")))
-    .thenReturn(partitionsDF)
-  when(partitionsDF.orderBy(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
-  when(dummyDF.limit(1)).thenReturn(dummyDF)
-  when(dummyDF.collect()).thenReturn(Array(row))
+            int id = 0;
+            if (rs.next()) {
+                id = rs.getInt("id");
+            }
 
-  // mocks comunes para todas las tablas
-  when(sqlContextMock.table(org.mockito.ArgumentMatchers.any[String])).thenReturn(dummyDF)
-  when(dummyDF.where(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
-  when(dummyDF.select(org.mockito.Matchers.any[Seq[Column]]: _*)).thenReturn(dummyDF)
-  when(dummyDF.select(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
-  when(dummyDF.selectExpr(org.mockito.Matchers.any[String])).thenReturn(dummyDF)
-  when(dummyDF.collect()).thenReturn(Array(row))
-  when(dummyDF.count()).thenReturn(1L)
-  when(dummyDF.columns).thenReturn(Array("col1", "col2"))
-  when(dummyDF.distinct()).thenReturn(dummyDF)
-  when(dummyDF.withColumn(org.mockito.Matchers.any[String], org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
-  when(dummyDF.withColumnRenamed(org.mockito.Matchers.any[String], org.mockito.Matchers.any[String])).thenReturn(dummyDF)
-  when(dummyDF.drop(org.mockito.Matchers.any[Column])).thenReturn(dummyDF)
-  when(dummyDF.repartition(1)).thenReturn(dummyDF)
-  when(dummyDF.toDF()).thenReturn(dummyDF)
-  when(dummyDF.map(org.mockito.Matchers.any())).thenReturn(dummyDF)
+            String updateStatusSql = "UPDATE process_sr_cloud SET status = ?, ts_end = now() WHERE id = ?";
+            try (PreparedStatement updatePs = conn.prepareStatement(updateStatusSql)) {
+                updatePs.setString(1, state);
+                updatePs.setInt(2, id);
+                updatePs.executeUpdate();
+                logger.info("[ER] - Executed query to update status");
+            }
 
-  // .write y .saveAsTable simulados
-  val writer = mock[org.apache.spark.sql.DataFrameWriter[Row]]
-  when(dummyDF.write).thenReturn(writer)
-  when(writer.mode("overwrite")).thenReturn(writer)
-  when(writer.saveAsTable(org.mockito.Matchers.any[String])).thenReturn(())
+            String updateIngestSql = "UPDATE ingestas_sr_cloud SET id_process_sr = ? " +
+                                     "WHERE pid = (SELECT pid FROM ingestas_sr_cloud " +
+                                     "WHERE id = (SELECT max(id) FROM ingestas_sr_cloud WHERE status != '3' AND feed = ?) " +
+                                     "AND id_process_sr IS NULL)";
 
-  // ALTER y DROP TABLE
-  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.argThat((s: String) => s.startsWith("ALTER TABLE")))).thenReturn(dummyDF)
-  when(sqlContextMock.sql(org.mockito.ArgumentMatchers.argThat((s: String) => s.startsWith("DROP TABLE")))).thenReturn(dummyDF)
-
-  // Act
-  HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
-
-  // Assert implícito: si llega aquí sin excepción, pasa
-  assert(true)
+            for (String t : tables) {
+                try (PreparedStatement updateIngestPs = conn.prepareStatement(updateIngestSql)) {
+                    updateIngestPs.setInt(1, id);
+                    updateIngestPs.setString(2, t);
+                    updateIngestPs.executeUpdate();
+                    logger.info("[ER] - Executed query to update ingest process id for table: " + t);
+                }
+            }
+        }
+    } catch (SQLException e) {
+        logger.error(e.getMessage(), e);
+        throw e;
+    }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+private void bloque(final String data_date_part, final String data_timestamp_part,
+                    final String state, final List<String> tables, final Connection conn) throws SQLException {
+
+    String query = "SELECT max(id) as id FROM bloques_sr_cloud " +
+                   "WHERE status = ? AND data_date_part = ? AND data_timestamp_part = ?";
+    try (PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setString(1, "0");
+        ps.setString(2, data_date_part);
+        ps.setString(3, data_timestamp_part);
+
+        try (ResultSet rs = ps.executeQuery()) {
+            logger.info("[ER] - Executed query to obtain id : " + query);
+
+            int id = 0;
+            if (rs.next()) {
+                id = rs.getInt("id");
+            }
+
+            String updateStatusSql = "UPDATE bloques_sr_cloud SET status = ?, ts_end = now() WHERE id = ?";
+            try (PreparedStatement updatePs = conn.prepareStatement(updateStatusSql)) {
+                updatePs.setString(1, state);
+                updatePs.setInt(2, id);
+                updatePs.executeUpdate();
+                logger.info("[ER] - Executed query to update status");
+            }
+
+            String updateIngestSql = "UPDATE ingestas_sr_cloud SET id_bloque_sr = ? " +
+                                     "WHERE pid = (SELECT pid FROM ingestas_sr_cloud " +
+                                     "WHERE id = (SELECT max(id) FROM ingestas_sr_cloud WHERE status != '3' AND feed = ?) " +
+                                     "AND id_bloque_sr IS NULL)";
+
+            for (String t : tables) {
+                try (PreparedStatement updateIngestPs = conn.prepareStatement(updateIngestSql)) {
+                    updateIngestPs.setInt(1, id);
+                    updateIngestPs.setString(2, t);
+                    updateIngestPs.executeUpdate();
+                    logger.info("[ER] - Executed query to update ingest process id for table: " + t);
+                }
+            }
+        }
+    } catch (SQLException e) {
+        logger.error(e.getMessage(), e);
+        throw e;
+    }
+}
+
