@@ -86,3 +86,19 @@ public static void generateDetailedTable(String sqlStatement,
 }
 
 
+
+
+
+
+
+                                                                                                          |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Seguridad SQL** (`procesos`, `bloque`)                                           | Sustituimos concatenaciones vulnerables y uso de `Statement` por **`PreparedStatement`** (place-holders `?`) y obtuvimos la `Connection` vía `st.getConnection()`.                                                                     | · Elimina inyección SQL (S2077) · Cambian firmas internas pero se mantiene la llamada externa (sigue recibiendo `Statement`). |
+| **Gestor de estilos Excel** (`WorkbookStyleManager`)                               | • Eliminamos los campos `styleTitle`, `styleHeader`, `styleRegular` y creamos los estilos **en cada llamada**.<br>• Sustituimos colores de `HSSFColor.*` por `IndexedColors.*`.                                                        | · Sin estado global → thread-safe · Se evita uso de APIs deprecadas.                                                          |
+| **Excel – generación de tablas** (`generateSummaryTable`, `generateDetailedTable`) | • Extraímos la lógica de consulta+procesado a métodos auxiliares (`processSummaryRows`, `processDetailRows`).<br>• El `try` anidado desaparece; el método principal solo abre/­cierra conexión y delega la lógica.                     | · Jerarquía de `try/catch` simplificada (S1141) · Métodos más cortos y testeables.                                            |
+| **Logging & utilidades**                                                           | • Añadimos `private static final Logger logger = LoggerFactory.getLogger(…)` y reemplazamos `System.out/printStackTrace()` por `logger.*`.<br>• Constructor privado en clases utilitarias (`SenderEmailUtil`, `WorkbookStyleManager`). | · Cumple reglas S106 y S1118 · Logging configurable a nivel de framework.                                                     |
+| **Tipos genéricos** (`ActionParameters`, `Table`, etc.)                            | Todos los `Map`/`List` raw se parametrizaron con `<String, Object>` y se usó el operador **diamante `<>`**.<br>Se tiparon helpers `cloneMap`, `deepMerge`, `mapFromJson`.                                                              | · Fuera code-smell S3740 · Menos castings y mayor seguridad de tipos.                                                         |
+| **Optional**                                                                       | Reemplazamos `com.google.common.base.Optional.fromNullable` por `java.util.Optional.ofNullable`.                                                                                                                                       | · Dependencia innecesaria a Guava eliminada · Cumple regla S3973.                                                             |
+
+
+
