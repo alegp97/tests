@@ -3,6 +3,13 @@ object DropRecordDriver extends HdfsFunctions {
   val DRIVER_APP_NAME = "[SAST] - Clean punctual elements - Spark Driver"
   val log = LogManager.getLogger(getClass.getName)
 
+  /**
+   * Punto de entrada principal del job.
+   * - Parsea argumentos
+   * - Crea SparkSession
+   * - Configura entorno Spark y Hadoop
+   * - Procesa el fichero de entrada para eliminar datos
+   */
   def main(args: Array[String]): Unit = {
     log.info(s"[SAST] - Starting drop elements")
     val parsedArgs = ArgsParser.parse(args, Args()).fold(ifEmpty = sys.exit(1))
@@ -27,14 +34,22 @@ object DropRecordDriver extends HdfsFunctions {
         throw new EresearchFileNotFoundException(s"The file : $fileName not exists")
       }
 
+      // Leer el contenido del fichero de configuración JSON
       val conf = Iterator.continually(HDFSHandler.getStream(fileName).readLine())
         .takeWhile(_ != null).mkString
       val entity = parse(conf, true).extract[CleanEntity]
+
+      // Procesar inputs del fichero de configuración
       processEntityInputs(entity, fileName, fs)
+
+      // Renombrar fichero procesado
       fs.rename(new Path(fileName), new Path(fileName + "." + System.currentTimeMillis()))
     }
   }
 
+  /**
+   * Configura parámetros de Spark y Hadoop necesarios para el job.
+   */
   private def configureSparkContext(spark: SparkSession): Unit = {
     val sc = spark.sqlContext
     sc.setConf("spark.sql.tungsten.enabled", "false")
@@ -46,12 +61,18 @@ object DropRecordDriver extends HdfsFunctions {
     sc.sql("set parquet.compression=GZIP")
   }
 
+  /**
+   * Procesa cada input especificado en el fichero de configuración:
+   * - Si los elementos son particiones, se eliminan con `ALTER TABLE DROP PARTITION`
+   * - Si no, se reconstruyen los datos sin las filas objetivo
+   */
   private def processEntityInputs(entity: CleanEntity, fileName: String, fs: FileSystem)
                                  (implicit spark: SparkSession): Unit = {
     entity.inputs.foreach { input =>
       val table = s"${input.database}.${input.table}"
 
       if (input.elements_are_partitions.getOrElse(false)) {
+        // Eliminar particiones directamente
         input.elements.foreach { element =>
           val path = HiveUtil.getLocationTable(input.database, input.table) + "/" +
                      element.toRemove.mkString("/").replace("\"", "")
@@ -60,6 +81,7 @@ object DropRecordDriver extends HdfsFunctions {
           spark.sqlContext.sql(s"ALTER TABLE $table DROP IF EXISTS PARTITION (${element.toRemove.mkString(",")})")
         }
       } else {
+        // Eliminar registros por filtro (overwrite sin los registros a eliminar)
         val filter = input.partition_filter.get.mkString(" and ")
         val partitionFilter = spark.sqlContext.table(input.partition_table.get).where(filter)
 
@@ -67,6 +89,7 @@ object DropRecordDriver extends HdfsFunctions {
           val filtro = element.toRemove.mkString(" and ")
           val target = spark.sqlContext.table(table).where(filtro)
           val diff = partitionFilter.except(target)
+
           val tmpPath = new Path(fileName).getParent + "/ruta_temp" + System.currentTimeMillis()
           diff.write.format("parquet").save(tmpPath)
           spark.sqlContext.read.parquet(tmpPath)
