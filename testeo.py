@@ -100,3 +100,36 @@ object DropRecordDriver extends HdfsFunctions {
     }
   }
 } 
+
+
+
+
+
+
+Se han aplicado los siguientes cambios sobre el objeto DropRecordDriver:
+
+Reducción de complejidad cognitiva del método main
+
+Se han extraído dos bloques funcionales en métodos auxiliares:
+
+configureSparkContext(spark: SparkSession)
+
+processEntityInputs(entity, fileName, fs)
+
+Esto permite cumplir con la regla de Sonar S3776 (máxima complejidad permitida).
+
+Mejora de legibilidad y estructura
+
+Se añadieron comentarios detallados sobre cada bloque principal del main y de los métodos extraídos.
+
+El main ahora refleja claramente el flujo del job: parseo de argumentos, configuración, procesamiento y renombrado del fichero.
+
+Corrección de error de tipo
+
+Se resolvió el error Type mismatch: required String, found List[String] accediendo correctamente a input.partition_table.get.head, con validación explícita en match para garantizar que solo se proporcione una tabla.
+
+Mantenimiento del comportamiento original
+
+No se ha modificado la lógica funcional del job.
+
+Solo se reorganizó el código para favorecer la mantenibilidad y cumplir las normas de calidad.
