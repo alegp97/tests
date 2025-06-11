@@ -18,13 +18,22 @@ test("run ejecuta todo correctamente hasta el punto de escritura") {
   when(scMock.hadoopConfiguration: org.apache.hadoop.conf.Configuration).thenReturn(confMock)
   when(sparkMock.sqlContext: SQLContext).thenReturn(sqlContextMock)
 
+  // Mock específico para maxPartition
+  val dfPartitions = mock[DataFrame]
+  val rowPartition = mock[Row]
+
+  when(rowPartition.getString(0)).thenReturn("partition=20240605")
+  when(dfPartitions.orderBy(any[Column])).thenReturn(dfPartitions)
+  when(dfPartitions.limit(1)).thenReturn(dfPartitions)
+  when(dfPartitions.collect()).thenReturn(Array(rowPartition))
+  when(sqlContextMock.sql(ArgumentMatchers.startsWith("show partitions"))).thenReturn(dfPartitions)
+
   // Simulación general de DF
   when(row.getString(0)).thenReturn("partition=20240605")
   when(anyDF.collect()).thenReturn(Array(row))
   when(anyDF.count()).thenReturn(1L)
   when(anyDF.columns).thenReturn(Array("col1", "col2"))
-  when(anyDF.select(any[Column])).thenReturn(anyDF)
-  when(anyDF.select(any[Column], any[Column])).thenReturn(anyDF)
+  when(anyDF.select(any[Array[Column]](): _*)).thenReturn(anyDF)
   when(anyDF.selectExpr(any[String])).thenReturn(anyDF)
   when(anyDF.withColumn(any[String], any[Column])).thenReturn(anyDF)
   when(anyDF.withColumnRenamed(any[String], any[String])).thenReturn(anyDF)
@@ -47,32 +56,26 @@ test("run ejecuta todo correctamente hasta el punto de escritura") {
   when(sqlContextMock.table(ArgumentMatchers.contains("granularities_map"))).thenReturn(anyDF)
   when(sqlContextMock.sql(any[String])).thenReturn(anyDF)
 
-  // Mocks para searchDuplicates y deleteDuplicatesInSource
-  val helper = mock[HistoricalExercisesJob.type]
-  when(helper.searchDuplicates(any[List[String]])).thenReturn(List.empty)
-  when(helper.deleteDuplicatesInSource(any[List[String]], any[List[String]])).thenReturn(List.empty)
-
   // Act & Assert
   try {
     HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
     fail("Se esperaba que falle en .write porque no puede ser mockeado")
   } catch {
-  case e: Exception =>
-    val msg = Option(e.getMessage).getOrElse("")
-    val exceptionType = e.getClass.getSimpleName
+    case e: Exception =>
+      val msg = Option(e.getMessage).getOrElse("")
+      val exceptionType = e.getClass.getSimpleName
 
-    val allowedMessageFragments = Seq("mock", "write", "saveAsTable", "RETURNS_DEEP_STUBS")
-    val allowedExceptionTypes = Seq("UnsupportedOperationException", "NullPointerException", "MockitoException")
+      val allowedMessageFragments = Seq("mock", "write", "saveAsTable", "RETURNS_DEEP_STUBS")
+      val allowedExceptionTypes = Seq("UnsupportedOperationException", "NullPointerException", "MockitoException")
 
-    val matchesMessage = allowedMessageFragments.exists(msg.contains)
-    val matchesType = allowedExceptionTypes.exists(exceptionType.contains)
+      val matchesMessage = allowedMessageFragments.exists(msg.contains)
+      val matchesType = allowedExceptionTypes.exists(exceptionType.contains)
 
-    assert(
-      matchesMessage || matchesType,
-      s"Se esperaba un fallo controlado por write/mocks, pero se lanzó: ${exceptionType} - ${msg}"
-    )
+      assert(
+        matchesMessage || matchesType,
+        s"Se esperaba un fallo controlado por write/mocks, pero se lanzó: $exceptionType - $msg"
+      )
 
-    info(s"✅ El método ejecutó todo correctamente hasta el punto de fallo esperado en .write (${exceptionType})")
-}
-
+      info(s"✅ El método ejecutó todo correctamente hasta el punto de fallo esperado en .write ($exceptionType)")
+  }
 }
