@@ -79,3 +79,10 @@ test("run ejecuta todo correctamente hasta el punto de escritura") {
       info(s"✅ El método ejecutó todo correctamente hasta el punto de fallo esperado en .write ($exceptionType)")
   }
 }
+
+
+
+val testQuery = "show partitions test_source.fields_dict"
+val result = sparkMock.sqlContext.sql(testQuery).collect()
+assert(result.length == 1)
+assert(result(0).getString(0) == "partition=20240605")
