@@ -1,49 +1,28 @@
   test("run avanza hasta .write sin NPE en maxPartition") {
 
-    // -----------------------------------------------------------------------
-    // 1.  Mocks base de Spark
-    // -----------------------------------------------------------------------
-    val sparkMock       = mock[SparkSession](RETURNS_DEEP_STUBS)
-    val scMock          = mock[SparkContext]
-    val hadoopConfMock  = mock[org.apache.hadoop.conf.Configuration]
-    val sqlCtxMock      = mock[SQLContext]
-
-    when(sparkMock.sparkContext).thenReturn(scMock)
-    when(scMock.hadoopConfiguration).thenReturn(hadoopConfMock)
-    when(sparkMock.sqlContext).thenAnswer(_ => sqlCtxMock)   // evita ambigüedad
-
-    // -----------------------------------------------------------------------
-    // 2.  Stub de la consulta de particiones (maxPartition)
-    // -----------------------------------------------------------------------
-    val dfPartitions = mock[DataFrame]
-    val rowPart      = mock[Row]
-
+   // ─── 1. mocks mínimos de Spark ─────────────────────────────────────────
+    val sparkMock  = mock[SparkSession](RETURNS_DEEP_STUBS)
+    val sqlCtxMock = mock[SQLContext]
+    when(sparkMock.sqlContext).thenReturn(sqlCtxMock)
+  
+    // ─── 2. stub show partitions → orderBy → limit → collect ───────────────
+    val dfPart  = mock[DataFrame]
+    val rowPart = mock[Row]
     when(rowPart.getString(0)).thenReturn("partition=20240605")
-
-    // orderBy(...)  y  limit(1)  deben devolver el mismo DF
-    when(dfPartitions.orderBy(any[Array[Column]](): _*)).thenReturn(dfPartitions)
-    when(dfPartitions.limit(anyInt())).thenReturn(dfPartitions)
-    when(dfPartitions.collect()).thenReturn(Array(rowPart))
-
-    // La SQL exacta que usa run()
-    when(sqlCtxMock.sql(startsWith("show partitions"))).thenReturn(dfPartitions)
-
-    // -----------------------------------------------------------------------
-    // 3.  DataFrame “comodín” para el resto de tablas / consultas
-    // -----------------------------------------------------------------------
+  
+    when(
+      dfPart.orderBy(any[Column]).limit(anyInt()).collect()
+    ).thenReturn(Array(rowPart))
+  
+    when(sqlCtxMock.sql(startsWith("show partitions"))).thenReturn(dfPart)
+  
+    // ─── 3. DataFrame comodín para el resto de tablas/consultas ────────────
     val anyDF = mock[DataFrame](RETURNS_DEEP_STUBS)
-
-    when(anyDF.columns).thenReturn(Array("col1", "col2"))
+    when(anyDF.columns).thenReturn(Array("c1","c2"))
     when(anyDF.collect()).thenReturn(Array(mock[Row]))
     when(anyDF.count()).thenReturn(1L)
-
-    when(sqlCtxMock.table(contains("fields_dict")))       .thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("exercise_inventory"))).thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("execution_def")))     .thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("st_metrics_input")))  .thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("data_output")))       .thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("contexts_st")))       .thenReturn(anyDF)
-    when(sqlCtxMock.table(contains("granularities_map"))) .thenReturn(anyDF)
+    when(sqlCtxMock.table(any[String])).thenReturn(anyDF)
+    when(sqlCtxMock.sql(any[String])).thenReturn(anyDF)
 
     // Fallback para cualquier otra SQL
     when(sqlCtxMock.sql(any[String])).thenReturn(anyDF)
