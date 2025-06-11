@@ -1,135 +1,66 @@
-object DropRecordDriver extends HdfsFunctions {
+test("run ejecuta correctamente sin lanzar errores") {
 
-  val DRIVER_APP_NAME = "[SAST] - Clean punctual elements - Spark Driver"
-  val log = LogManager.getLogger(getClass.getName)
+    // Arrange
+    val sparkMock = mock[SparkSession]
+    val scMock = mock[SparkContext]
+    val confMock = mock[SparkConf]
+    val sqlContextMock = mock[SQLContext]
 
-  /**
-   * Punto de entrada principal del job.
-   * - Parsea argumentos
-   * - Crea SparkSession
-   * - Configura entorno Spark y Hadoop
-   * - Procesa el fichero de entrada para eliminar datos
-   */
-  def main(args: Array[String]): Unit = {
-    log.info(s"[SAST] - Starting drop elements")
-    val parsedArgs = ArgsParser.parse(args, Args()).fold(ifEmpty = sys.exit(1))
+    val sourcedb = "test_source"
+    val targetdb = "test_target"
+    val data_timestamp_part = "20240605"
+    val entities = List(mock[IngestEntity])
 
-    val spark = SparkSession.builder
-      .appName(DRIVER_APP_NAME)
-      .config("hive.exec.dynamic.partition.mode", "nonstrict")
-      .config("hive.metastore.try.direct.sql", "true")
-      .config("spark.sql.hive.convertMetastoreParquet", "false")
-      .enableHiveSupport()
-      .getOrCreate()
+    // Mocks esenciales del entorno
+    when(sparkMock.sparkContext).thenReturn(scMock)
+    when(scMock.hadoopConfiguration).thenReturn(confMock)
+    when(sparkMock.sqlContext).thenReturn(sqlContextMock)
 
-    SparkContextUtil.withHiveContext(DRIVER_APP_NAME) { implicit spark =>
-      configureSparkContext(spark)
+    // Mock del DataFrame general
+    val anyDF = mock[DataFrame]
+    val row = mock[Row]
 
-      val fileName = parsedArgs.file
-      val filePath = new Path(fileName)
-      val fs = HDFSHandler.getFileSystem(fileName)
+    // DataFrameWriter mock (pero sabiendo que puede fallar)
+    val writerMock = mock[DataFrameWriter[Row]](RETURNS_DEEP_STUBS)
+    try {
+      when(anyDF.write).thenReturn(writerMock)
+    } catch {
+      case e: Exception =>
+        // En caso de fallo por ser clase final, ignoramos
+    }
 
-      if (!fs.exists(filePath)) {
-        log.error(s"[SAST] - File $fileName not found")
-        throw new EresearchFileNotFoundException(s"The file : $fileName not exists")
-      }
+    when(writerMock.mode(SaveMode.Overwrite)).thenReturn(writerMock)
+    when(writerMock.saveAsTable(any[String])).thenReturn(())
 
-      // Leer el contenido del fichero de configuración JSON
-      val conf = Iterator.continually(HDFSHandler.getStream(fileName).readLine())
-        .takeWhile(_ != null).mkString
-      val entity = parse(conf, true).extract[CleanEntity]
+    when(row.getString(0)).thenReturn("partition=20240605")
+    when(anyDF.collect()).thenReturn(Array(row))
+    when(anyDF.columns).thenReturn(Array("col1", "col2"))
+    when(anyDF.select(any[Seq[Column]])).thenReturn(anyDF)
+    when(anyDF.select(any[Column])).thenReturn(anyDF)
+    when(anyDF.selectExpr(any[String])).thenReturn(anyDF)
+    when(anyDF.withColumn(any[String], any[Column])).thenReturn(anyDF)
+    when(anyDF.withColumnRenamed(any[String], any[String])).thenReturn(anyDF)
+    when(anyDF.drop(any[Column])).thenReturn(anyDF)
+    when(anyDF.where(any[Column])).thenReturn(anyDF)
+    when(anyDF.join(any[DataFrame], any[Column])).thenReturn(anyDF)
+    when(anyDF.join(any[DataFrame])).thenReturn(anyDF)
+    when(anyDF.count()).thenReturn(1L)
+    when(anyDF.repartition(any[Int])).thenReturn(anyDF)
 
-      // Procesar inputs del fichero de configuración
-      processEntityInputs(entity, fileName, fs)
+    // Mocks de tablas y SQLContext
+    when(sqlContextMock.sql(any[String])).thenReturn(anyDF)
+    when(sqlContextMock.table(any[String])).thenReturn(anyDF)
 
-      // Renombrar fichero procesado
-      fs.rename(new Path(fileName), new Path(fileName + "." + System.currentTimeMillis()))
+    // Mocks para funciones estáticas dentro de objetos (si son usadas)
+    val helper = mock[HistoricalExercisesJob.type]
+    when(helper.searchDuplicates(any[List[String]])).thenReturn(List.empty)
+    when(helper.deleteDuplicatesInSource(any[List[String]], any[List[String]])).thenReturn(List.empty)
+
+    // Act & Assert
+    try {
+      HistoricalExercisesJob.run(sourcedb, targetdb, data_timestamp_part, entities)(sparkMock)
+    } catch {
+      case e: Exception =>
+        fail(s"No debería lanzar excepción, pero lanzó: ${e.getMessage}")
     }
   }
-
-  /**
-   * Configura parámetros de Spark y Hadoop necesarios para el job.
-   */
-  private def configureSparkContext(spark: SparkSession): Unit = {
-    val sc = spark.sqlContext
-    sc.setConf("spark.sql.tungsten.enabled", "false")
-    sc.setConf("spark.sql.hive.convertMetastoreParquet", "false")
-    sc.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
-    sc.hadoopConfiguration.set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false")
-    sc.setConf("parquet.enable.summary-metadata", "false")
-    spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
-    sc.sql("set parquet.compression=GZIP")
-  }
-
-  /**
-   * Procesa cada input especificado en el fichero de configuración:
-   * - Si los elementos son particiones, se eliminan con `ALTER TABLE DROP PARTITION`
-   * - Si no, se reconstruyen los datos sin las filas objetivo
-   */
-  private def processEntityInputs(entity: CleanEntity, fileName: String, fs: FileSystem)
-                                 (implicit spark: SparkSession): Unit = {
-    entity.inputs.foreach { input =>
-      val table = s"${input.database}.${input.table}"
-
-      if (input.elements_are_partitions.getOrElse(false)) {
-        // Eliminar particiones directamente
-        input.elements.foreach { element =>
-          val path = HiveUtil.getLocationTable(input.database, input.table) + "/" +
-                     element.toRemove.mkString("/").replace("\"", "")
-          val pathObj = new Path(path)
-          if (fs.exists(pathObj)) fs.delete(pathObj, true)
-          spark.sqlContext.sql(s"ALTER TABLE $table DROP IF EXISTS PARTITION (${element.toRemove.mkString(",")})")
-        }
-      } else {
-        // Eliminar registros por filtro (overwrite sin los registros a eliminar)
-        val filter = input.partition_filter.get.mkString(" and ")
-        val partitionFilter = spark.sqlContext.table(input.partition_table.get).where(filter)
-
-        input.elements.foreach { element =>
-          val filtro = element.toRemove.mkString(" and ")
-          val target = spark.sqlContext.table(table).where(filtro)
-          val diff = partitionFilter.except(target)
-
-          val tmpPath = new Path(fileName).getParent + "/ruta_temp" + System.currentTimeMillis()
-          diff.write.format("parquet").save(tmpPath)
-          spark.sqlContext.read.parquet(tmpPath)
-            .write.mode("overwrite").format("parquet").insertInto(table)
-          fs.delete(new Path(tmpPath), true)
-        }
-      }
-    }
-  }
-} 
-
-
-
-
-
-
-Se han aplicado los siguientes cambios sobre el objeto DropRecordDriver:
-
-Reducción de complejidad cognitiva del método main
-
-Se han extraído dos bloques funcionales en métodos auxiliares:
-
-configureSparkContext(spark: SparkSession)
-
-processEntityInputs(entity, fileName, fs)
-
-Esto permite cumplir con la regla de Sonar S3776 (máxima complejidad permitida).
-
-Mejora de legibilidad y estructura
-
-Se añadieron comentarios detallados sobre cada bloque principal del main y de los métodos extraídos.
-
-El main ahora refleja claramente el flujo del job: parseo de argumentos, configuración, procesamiento y renombrado del fichero.
-
-Corrección de error de tipo
-
-Se resolvió el error Type mismatch: required String, found List[String] accediendo correctamente a input.partition_table.get.head, con validación explícita en match para garantizar que solo se proporcione una tabla.
-
-Mantenimiento del comportamiento original
-
-No se ha modificado la lógica funcional del job.
-
-Solo se reorganizó el código para favorecer la mantenibilidad y cumplir las normas de calidad.
