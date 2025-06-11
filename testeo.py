@@ -1,28 +1,41 @@
- // 1. Spark mocks
+  test("run avanza hasta .write sin NullPointer") {
+
+    // ── 1.  SparkSession + SQLContext ────────────────────────────────────
     val sparkMock  = mock[SparkSession]
     val sqlCtxMock = mock[SQLContext]
     when(sparkMock.sqlContext).thenReturn(sqlCtxMock)
 
-    // 2. show partitions  → orderBy → limit → collect
-    val dfPart  = mock[DataFrame]
-    val rowPart = mock[Row]
+    // ── 2.  Cadena show partitions ▸ orderBy ▸ limit ▸ collect() ─────────
+    val dfShow   = mock[DataFrame]          //  show partitions …
+    val dfOrder  = mock[DataFrame]          //  after orderBy
+    val dfLimit  = mock[DataFrame]          //  after limit(1)
+    val rowPart  = mock[Row]
+
     when(rowPart.getString(0)).thenReturn("partition=20240605")
 
-    when(dfPart.orderBy(any[Column]))                .thenAnswer(returnsSelf)
-    when(dfPart.orderBy(any[Array[Column]](): _*))   .thenAnswer(returnsSelf)
-    when(dfPart.limit(anyInt()))                     .thenAnswer(returnsSelf)
-    when(dfPart.collect())                           .thenReturn(Array(rowPart))
+    //  show partitions …  →  dfShow
+    when(sqlCtxMock.sql(startsWith("show partitions"))).thenReturn(dfShow)
 
-    when(sqlCtxMock.sql(startsWith("show partitions"))).thenReturn(dfPart)
+    //  dfShow.orderBy(... ) → dfOrder         (sobrecarga 1-col + var-args)
+    when(dfShow.orderBy(any[Column])).thenReturn(dfOrder)
+    when(dfShow.orderBy(any[Array[Column]](): _*)).thenReturn(dfOrder)
 
-    // 3. cualquier tabla / sql → DataFrame comodín
-    val anyDF = mock[DataFrame](RETURNS_DEEP_STUBS)
-    when(anyDF.collect()).thenReturn(Array(mock[Row]))
+    //  dfOrder.limit(1)     → dfLimit
+    when(dfOrder.limit(anyInt())).thenReturn(dfLimit)
+
+    //  dfLimit.collect()    → Array(rowPart)
+    when(dfLimit.collect()).thenReturn(Array(rowPart))
+
+    // ── 3.  DataFrame genérico para todas las demás tablas / SQL ─────────
+    val anyDF  = mock[DataFrame](RETURNS_DEEP_STUBS)
+    val anyRow = mock[Row]
+    when(anyRow.getString(anyInt())).thenReturn("")
+    when(anyDF.collect()).thenReturn(Array(anyRow))
     when(anyDF.columns).thenReturn(Array("c1","c2"))
     when(anyDF.count()).thenReturn(1L)
-    when(sqlCtxMock.table(any[String]))  .thenReturn(anyDF)
-    when(sqlCtxMock.sql(any[String]))    .thenReturn(anyDF)
+    when(sqlCtxMock.table(any[String])).thenReturn(anyDF)
+    when(sqlCtxMock.sql(any[String])).thenReturn(anyDF)
 
-    // 4. IngestEntity
+    // ── 4.  IngestEntity válido ──────────────────────────────────────────
     val entity = mock[IngestEntity]
     when(entity.getDataTimestampPart).thenReturn("20240605")
