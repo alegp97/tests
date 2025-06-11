@@ -64,3 +64,41 @@ test("run ejecuta correctamente sin lanzar errores") {
         fail(s"No debería lanzar excepción, pero lanzó: ${e.getMessage}")
     }
   }
+
+
+
+
+// Comportamiento básico
+when(row.getString(0)).thenReturn("partition=20240605")
+when(anyDF.collect()).thenReturn(Array(row))
+when(anyDF.count()).thenReturn(1L)
+when(anyDF.columns).thenReturn(Array("col1", "col2"))
+when(anyDF.repartition(any[Int])).thenReturn(anyDF)
+when(anyDF.distinct()).thenReturn(anyDF)
+when(anyDF.toDF()).thenReturn(anyDF)
+
+// SELECT (sobrecargas)
+when(anyDF.select(any[Column])).thenReturn(anyDF)
+when(anyDF.select(any[Column], any[Column])).thenReturn(anyDF)
+when(anyDF.select(any[Seq[Column]])).thenReturn(anyDF)
+when(anyDF.selectExpr(any[String])).thenReturn(anyDF)
+
+// WHERE / FILTER
+when(anyDF.where(any[Column])).thenReturn(anyDF)
+when(anyDF.filter(any[Column])).thenReturn(anyDF)
+
+// JOIN (sobrecargas)
+when(anyDF.join(any[DataFrame])).thenReturn(anyDF)
+when(anyDF.join(any[DataFrame], any[Column])).thenReturn(anyDF)
+when(anyDF.join(any[DataFrame], any[Column], any[String])).thenReturn(anyDF)
+
+// WITHCOLUMN
+when(anyDF.withColumn(any[String], any[Column])).thenReturn(anyDF)
+when(anyDF.withColumnRenamed(any[String], any[String])).thenReturn(anyDF)
+
+// DROP
+when(anyDF.drop(any[Column])).thenReturn(anyDF)
+when(anyDF.drop(any[String])).thenReturn(anyDF)
+
+// MAP, ZIP, etc. (si los necesitas)
+when(anyDF.map(any())).thenReturn(anyDF) // Requiere contexto implícito, usar con cuidado
