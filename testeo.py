@@ -1,3 +1,29 @@
+// -----------------------------------------------------------------------------
+    // Mock para fields_dict del targetdb  (evita NPE en línea 52)
+    // -----------------------------------------------------------------------------
+    val columnsVariablesDF   = mock[DataFrame]
+    val distinctVarsDF       = mock[DataFrame]
+    val fkRow                = mock[Row]
+
+    when(sqlContext.table(s"$targetdb.fields_dict")).thenReturn(columnsVariablesDF)
+    when(columnsVariablesDF.where(any[Column])).thenReturn(columnsVariablesDF)
+    when(columnsVariablesDF.select(any[Array[Column]](): _*)).thenReturn(columnsVariablesDF)
+    when(columnsVariablesDF.distinct()).thenReturn(distinctVarsDF)
+    when(columnsVariablesDF.count()).thenReturn(1L)
+    when(fkRow.getString(0)).thenReturn("partition_key")
+    when(distinctVarsDF.collect()).thenReturn(Array(fkRow))
+
+    // -----------------------------------------------------------------------------
+    // Mock para consulta de partitions (show partitions ...)  → evita NPE previas
+    // -----------------------------------------------------------------------------
+    val partitionsDF  = mock[DataFrame]
+    val partitionsRow = mock[Row]
+    when(partitionsRow.getString(0)).thenReturn("20240601=value")
+    when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
+    when(partitionsDF.orderBy(any[Column])).thenReturn(partitionsDF)
+    when(partitionsDF.limit(any[Int])).thenReturn(partitionsDF)
+    when(partitionsDF.collect()).thenReturn(Array(partitionsRow))
+
     // -----------------------------------------------------------------------------
     // Mock para fields_dict del targetdb  (evita NPE en línea 52)
     // -----------------------------------------------------------------------------
