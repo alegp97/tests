@@ -1,25 +1,62 @@
-    // 1. SparkSession y SQLContext
-    val sparkMock  = mock[SparkSession]
-    val sqlCtxMock = mock[SQLContext]
-    when(sparkMock.sqlContext).thenReturn(sqlCtxMock)
+class GenerateExecutionDefViewJobTest extends AnyFunSuite with MockitoSugar {
 
-    // 2. show partitions ▸ orderBy ▸ limit ▸ collect
-    val dfShow  = mock[DataFrame]   // A
-    val dfOrd   = mock[DataFrame]   // B
-    val dfLim   = mock[DataFrame]   // C
-    val rowPart = mock[Row]
+  test("run should create the execution_def view when fields_dict is not empty") {
+    val sqlContext = mock[SQLContext]
+    val settings = mock[BoardsArgs]
 
-    when(rowPart.getString(0)).thenReturn("partition=20240605")
+    val sourceDB = "src_db"
+    val targetDB = "tgt_db"
+    val prefix = "mytable"
+    val inputExecDef = s"${prefix}_input"
+    val outputExecDef = s"${prefix}_output"
 
-    // sql(...) -> A
-    when(sqlCtxMock.sql(startsWith("show partitions"))).thenReturn(dfShow)
+    when(settings.sourcedb).thenReturn(sourceDB)
+    when(settings.targetdb).thenReturn(targetDB)
+    when(settings.sourceTable).thenReturn(prefix)
 
-    // A.orderBy(...) -> B
-    when(dfShow.orderBy(any[Column])).thenReturn(dfOrd)
-    when(dfShow.orderBy(any[Array[Column]](): _*)).thenReturn(dfOrd)
+    // Tabla input/output mock
+    val inputDF = mock[DataFrame]
+    val outputDF = mock[DataFrame]
 
-    // B.limit(1)     -> C
-    when(dfOrd.limit(anyInt())).thenReturn(dfLim)
+    when(sqlContext.table(s"$targetDB.$inputExecDef")).thenReturn(inputDF)
+    when(sqlContext.table(s"$targetDB.$outputExecDef")).thenReturn(outputDF)
+    when(inputDF.columns).thenReturn(Array("col_a", "col_b"))
+    when(outputDF.columns).thenReturn(Array("col_a", "col_b"))
 
-    // C.collect()    -> fila simulada
-    when(dfLim.collect()).thenReturn(Array(rowPart))
+    // Simulación de show partitions
+    val partitionRow = mock[Row]
+    when(partitionRow.getString(0)).thenReturn("20240601=whatever")
+    val partitionsDF = mock[DataFrame]
+    when(partitionsDF.collect()).thenReturn(Array(partitionRow))
+    when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
+
+    // Simulación de fields_dict
+    val fieldsDictDF = mock[DataFrame]
+    val selectedDF = mock[DataFrame]
+    when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
+    when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(fieldsDictDF)
+    when(fieldsDictDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
+    when(selectedDF.distinct()).thenReturn(selectedDF)
+
+    // Mock de collect de campos del dict
+    val rowField = Row("col_a")
+    val rowSchema = StructType(Seq(StructField("fld_name", StringType)))
+    val rowRDD = org.apache.spark.sql.SparkSession.builder.getOrCreate().sparkContext.parallelize(Seq(rowField))
+    val rowDF = org.apache.spark.sql.SparkSession.builder.getOrCreate().createDataFrame(rowRDD, rowSchema)
+    when(selectedDF.collect()).thenReturn(rowDF.collect())
+
+    // Mock del schema con tipos
+    val schema = StructType(Seq(
+      StructField("col_a", DecimalType(10, 2)),
+      StructField("col_b", IntegerType)
+    ))
+    when(inputDF.schema).thenReturn(schema)
+    when(outputDF.schema).thenReturn(schema)
+
+    // Simula sqlContext.sql(...)
+    when(sqlContext.sql(startsWith("DROP VIEW"))).thenReturn(mock[DataFrame])
+    when(sqlContext.sql(startsWith("CREATE VIEW"))).thenReturn(mock[DataFrame])
+
+    // Run
+    GenerateExecutionDefViewJob.run(sqlContext, settings)
+  }
