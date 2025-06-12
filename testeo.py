@@ -1,9 +1,8 @@
-class GenerateExecutionDefViewJobTest extends AnyFunSuite with MockitoSugar {
-
-  test("run should create the execution_def view when fields_dict is not empty") {
+  test("run should build the view when fields_dict has content and partitions are present") {
     val sqlContext = mock[SQLContext]
     val settings = mock[BoardsArgs]
 
+    // Configuración básica
     val sourceDB = "src_db"
     val targetDB = "tgt_db"
     val prefix = "mytable"
@@ -14,7 +13,7 @@ class GenerateExecutionDefViewJobTest extends AnyFunSuite with MockitoSugar {
     when(settings.targetdb).thenReturn(targetDB)
     when(settings.sourceTable).thenReturn(prefix)
 
-    // Tabla input/output mock
+    // Mock para exec_def_in_DF y exec_def_ou_DF
     val inputDF = mock[DataFrame]
     val outputDF = mock[DataFrame]
 
@@ -23,29 +22,33 @@ class GenerateExecutionDefViewJobTest extends AnyFunSuite with MockitoSugar {
     when(inputDF.columns).thenReturn(Array("col_a", "col_b"))
     when(outputDF.columns).thenReturn(Array("col_a", "col_b"))
 
-    // Simulación de show partitions
-    val partitionRow = mock[Row]
-    when(partitionRow.getString(0)).thenReturn("20240601=whatever")
+    // 🔴 Mock completo de la línea 47: show partitions ...
     val partitionsDF = mock[DataFrame]
-    when(partitionsDF.collect()).thenReturn(Array(partitionRow))
+    val orderedDF = mock[DataFrame]
+    val limitedDF = mock[DataFrame]
+    val partitionRow = mock[Row]
+
+    when(partitionRow.getString(0)).thenReturn("20240601=value")
     when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
+    when(partitionsDF.orderBy(any[org.apache.spark.sql.Column])).thenReturn(orderedDF)
+    when(orderedDF.limit(1)).thenReturn(limitedDF)
+    when(limitedDF.collect()).thenReturn(Array(partitionRow))
 
-    // Simulación de fields_dict
+    // Mock para fields_dict
     val fieldsDictDF = mock[DataFrame]
+    val filteredDF = mock[DataFrame]
     val selectedDF = mock[DataFrame]
-    when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
-    when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(fieldsDictDF)
-    when(fieldsDictDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
-    when(selectedDF.distinct()).thenReturn(selectedDF)
-
-    // Mock de collect de campos del dict
+    val distinctedDF = mock[DataFrame]
     val rowField = Row("col_a")
-    val rowSchema = StructType(Seq(StructField("fld_name", StringType)))
-    val rowRDD = org.apache.spark.sql.SparkSession.builder.getOrCreate().sparkContext.parallelize(Seq(rowField))
-    val rowDF = org.apache.spark.sql.SparkSession.builder.getOrCreate().createDataFrame(rowRDD, rowSchema)
-    when(selectedDF.collect()).thenReturn(rowDF.collect())
 
-    // Mock del schema con tipos
+    when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
+    when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
+    when(filteredDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF) // por si hay dos where
+    when(filteredDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
+    when(selectedDF.distinct()).thenReturn(distinctedDF)
+    when(distinctedDF.collect()).thenReturn(Array(rowField))
+
+    // Mock de los schemas
     val schema = StructType(Seq(
       StructField("col_a", DecimalType(10, 2)),
       StructField("col_b", IntegerType)
@@ -53,10 +56,10 @@ class GenerateExecutionDefViewJobTest extends AnyFunSuite with MockitoSugar {
     when(inputDF.schema).thenReturn(schema)
     when(outputDF.schema).thenReturn(schema)
 
-    // Simula sqlContext.sql(...)
+    // Mock para sqlContext.sql(...) de DROP y CREATE
     when(sqlContext.sql(startsWith("DROP VIEW"))).thenReturn(mock[DataFrame])
     when(sqlContext.sql(startsWith("CREATE VIEW"))).thenReturn(mock[DataFrame])
 
-    // Run
+    // Ejecutar
     GenerateExecutionDefViewJob.run(sqlContext, settings)
   }
