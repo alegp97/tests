@@ -1,40 +1,25 @@
-// -----------------------------------------------------------------------------
-    // Mock para fields_dict del targetdb  (evita NPE en línea 52)
-    // -----------------------------------------------------------------------------
-    val columnsVariablesDF   = mock[DataFrame]
-    val distinctVarsDF       = mock[DataFrame]
-    val fkRow                = mock[Row]
+// Transformaciones
+    val df_stmetrics_partitionkey = mock[DataFrame]
+    val df_afterDrop = mock[DataFrame]
+    val df_castedNumeric = mock[DataFrame]
+    val df_castedWeight = mock[DataFrame]
 
-    when(sqlContext.table(s"$targetdb.fields_dict")).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.where(any[Column])).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.select(any[Array[Column]](): _*)).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.distinct()).thenReturn(distinctVarsDF)
-    when(columnsVariablesDF.count()).thenReturn(1L)
-    when(fkRow.getString(0)).thenReturn("partition_key")
-    when(distinctVarsDF.collect()).thenReturn(Array(fkRow))
+    when(finalDF.drop(eqTo("data_date_part"))).thenReturn(df_afterDrop)
+    when(df_afterDrop.columns).thenReturn(Array("num_col"))
+    when(df_afterDrop.withColumn(eqTo("num_col"), any[Column])).thenReturn(df_castedNumeric)
+    when(df_castedNumeric.withColumn(eqTo("weight_inout"), any[Column])).thenReturn(df_castedWeight)
+    when(df_castedWeight.count()).thenReturn(10L)
+    when(df_castedWeight.write).thenReturn(writer)
+    doNothing().when(writer).saveAsTable(eqTo(s"$targetdb.$outputTable"))
+    when(renamedDF.select(any[Array[Column]](): _*)).thenReturn(renamedDF)
+    when(renamedDF.withColumn(any[String], any[Column])).thenReturn(renamedDF)
+    when(renamedDF.drop(eqTo("data_date_part"))).thenReturn(renamedDF)
+    when(renamedDF.columns).thenReturn(Array("num_col", "weight_inout"))
 
-    // -----------------------------------------------------------------------------
-    // Mock para consulta de partitions (show partitions ...)  → evita NPE previas
-    // -----------------------------------------------------------------------------
-    val partitionsDF  = mock[DataFrame]
-    val partitionsRow = mock[Row]
-    when(partitionsRow.getString(0)).thenReturn("20240601=value")
-    when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
-    when(partitionsDF.orderBy(any[Column])).thenReturn(partitionsDF)
-    when(partitionsDF.limit(any[Int])).thenReturn(partitionsDF)
-    when(partitionsDF.collect()).thenReturn(Array(partitionsRow))
+    when(renamedDF.withColumn(eqTo("row_count"), any[Column])).thenReturn(withRowCountDF)
+    when(withRowCountDF.withColumn(any[String], any[Column])).thenReturn(castedDF)
+    when(castedDF.withColumn(any[String], any[Column])).thenReturn(finalDF)
+    when(finalDF.columns).thenReturn(Array("x"))
 
-    // -----------------------------------------------------------------------------
-    // Mock para fields_dict del targetdb  (evita NPE en línea 52)
-    // -----------------------------------------------------------------------------
-    val columnsVariablesDF   = mock[DataFrame]
-    val distinctVarsDF       = mock[DataFrame]
-    val fkRow                = mock[Row]
-
-    when(sqlContext.table(s"$targetdb.fields_dict")).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.where(any[Column])).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.select(any[Array[Column]](): _*)).thenReturn(columnsVariablesDF)
-    when(columnsVariablesDF.distinct()).thenReturn(distinctVarsDF)
-    when(columnsVariablesDF.count()).thenReturn(1L)
-    when(fkRow.getString(0)).thenReturn("partition_key")
-    when(distinctVarsDF.collect()).thenReturn(Array(fkRow))
+    when(renamedDF.count()).thenReturn(10L)
+    when(finalDF.count()).thenReturn(10L)
