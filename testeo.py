@@ -1,69 +1,70 @@
-test("run should build the view and entrar en ambos else: JEJEJEJEJE + JAJAJAJAJAJAJA") {
-  val sqlContext = mock[SQLContext]
-  val settings = mock[BoardsArgs]
+  test("run debe entrar en ambos else (JEJEJEJEJE y JAJAJAJAJAJAJA)") {
 
-  // Configuración básica
-  val sourceDB = "src_db"
-  val targetDB = "tgt_db"
-  val prefix = "mytable"
-  val inputExecDef = s"${prefix}_input"
-  val outputExecDef = s"${prefix}_output"
+    // -- Mocks base ----------------------------------------------------------
+    val sqlContext = mock[SQLContext]
+    val settings   = mock[BoardsArgs]
 
-  when(settings.sourcedb).thenReturn(sourceDB)
-  when(settings.targetdb).thenReturn(targetDB)
-  when(settings.sourceTable).thenReturn(prefix)
+    val sourceDB     = "src_db"
+    val targetDB     = "tgt_db"
+    val prefix       = "mytable"
+    val inputExecDef = s"${prefix}_input"
+    val outputExecDef= s"${prefix}_output"
 
-  // Mock para exec_def_in_DF y exec_def_ou_DF
-  val inputDF = mock[DataFrame]
-  val outputDF = mock[DataFrame]
+    when(settings.sourcedb).thenReturn(sourceDB)
+    when(settings.targetdb).thenReturn(targetDB)
+    when(settings.sourceTable).thenReturn(prefix)
 
-  when(sqlContext.table(s"$targetDB.$inputExecDef")).thenReturn(inputDF)
-  when(sqlContext.table(s"$targetDB.$outputExecDef")).thenReturn(outputDF)
+    val inputDF  = mock[DataFrame]
+    val outputDF = mock[DataFrame]
 
-  // Columnas mockeadas
-  when(inputDF.columns).thenReturn(Array("col_a", "col_b"))
-  when(outputDF.columns).thenReturn(Array("col_a", "col_b"))
+    when(sqlContext.table(s"$targetDB.$inputExecDef")).thenReturn(inputDF)
+    when(sqlContext.table(s"$targetDB.$outputExecDef")).thenReturn(outputDF)
 
-  // Mock completo de la línea 47: show partitions
-  val partitionsDF = mock[DataFrame]
-  val orderedDF = mock[DataFrame]
-  val limitedDF = mock[DataFrame]
-  val partitionRow = mock[Row]
+    when(inputDF.columns).thenReturn(Array("col_a", "col_b"))
+    when(outputDF.columns).thenReturn(Array("col_a", "col_b"))
 
-  when(partitionRow.getString(0)).thenReturn("20240601=value")
-  when(sqlContext.sql(ArgumentMatchers.contains("show partitions"))).thenReturn(partitionsDF)
-  when(partitionsDF.orderBy(any[org.apache.spark.sql.Column])).thenReturn(orderedDF)
-  when(orderedDF.limit(1)).thenReturn(limitedDF)
-  when(limitedDF.collect()).thenReturn(Array(partitionRow))
+    // -- Mock SHOW PARTITIONS ------------------------------------------------
+    val partitionsDF = mock[DataFrame]
+    val orderedDF    = mock[DataFrame]
+    val limitedDF    = mock[DataFrame]
+    val partitionRow = mock[Row]
 
-  // Mock para fields_dict
-  val fieldsDictDF = mock[DataFrame]
-  val filteredDF = mock[DataFrame]
-  val selectedDF = mock[DataFrame]
-  val distinctedDF = mock[DataFrame]
+    when(partitionRow.getString(0)).thenReturn("20240601=value")
 
-  val rowField = Row("otra_col") // No coincide con col_a ni col_b → fuerza el primer else
+    when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
+    when(partitionsDF.orderBy(any[org.apache.spark.sql.Column])).thenReturn(orderedDF)
+    when(orderedDF.limit(1)).thenReturn(limitedDF)
+    when(limitedDF.collect()).thenReturn(Array(partitionRow))
 
-  when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
-  when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
-  when(filteredDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
-  when(filteredDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
-  when(selectedDF.distinct()).thenReturn(distinctedDF)
-  when(distinctedDF.collect()).thenReturn(Array(rowField))
+    // -- Mock fields_dict ----------------------------------------------------
+    val fieldsDictDF  = mock[DataFrame]
+    val filteredDF    = mock[DataFrame]
+    val selectedDF    = mock[DataFrame]
+    val distinctedDF  = mock[DataFrame]
 
-  // Mock de los schemas con tipos que NO coinciden con DecimalType ni IntegerType
-  val schema = StructType(Seq(
-    StructField("col_a", StringType),  // fuerza else de tipo
-    StructField("col_b", BooleanType)  // fuerza else de tipo
-  ))
+    when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
+    when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
+    when(filteredDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
+    when(filteredDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
+    when(selectedDF.distinct()).thenReturn(distinctedDF)
 
-  when(inputDF.schema).thenReturn(schema)
-  when(outputDF.schema).thenReturn(schema)
+    //  >>> Array vacío ← exec_in_columns = Seq.empty  → check = false
+    when(distinctedDF.collect()).thenReturn(Array.empty[Row])
 
-  // Mock para sqlContext.sql(...): DROP y CREATE
-  when(sqlContext.sql(ArgumentMatchers.startsWith("DROP VIEW"))).thenReturn(mock[DataFrame])
-  when(sqlContext.sql(ArgumentMatchers.startsWith("CREATE VIEW"))).thenReturn(mock[DataFrame])
+    // -- Schema sin Decimal/Integer para forzar el segundo else --------------
+    val schema = StructType(Seq(
+      StructField("col_a", StringType),
+      StructField("col_b", BooleanType)
+    ))
 
-  // Ejecutar
-  GenerateExecutionDefViewJob.run(sqlContext, settings)
+    when(inputDF.schema).thenReturn(schema)
+    when(outputDF.schema).thenReturn(schema)
+
+    // -- Ignoramos ejecución real de DROP / CREATE --------------------------
+    when(sqlContext.sql(startsWith("DROP VIEW"))).thenReturn(mock[DataFrame])
+    when(sqlContext.sql(startsWith("CREATE VIEW"))).thenReturn(mock[DataFrame])
+
+    // -- Ejecutar el job -----------------------------------------------------
+    GenerateExecutionDefViewJob.run(sqlContext, settings)
+  }
 }
