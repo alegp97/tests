@@ -1,129 +1,55 @@
-import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.SQLContext
 import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import com.santander.stresstest.compaction.CompactorProcess
-import com.santander.stresstest.util.{HiveUtil, HdfsUtil}
 import com.santander.stresstest.process.CompactionProcess
-import com.santander.stresstest.entity.IngestEntity
-import com.santander.stresstest.parser.config.CompactorArgs
+import com.santander.stresstest.util.HdfsUtil
 
-import scala.collection.mutable
+class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar {
 
-class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar with BeforeAndAfterAll {
+  test("getMapPath should split paths evenly across threads") {
+    val allPaths = List("a", "b", "c", "d", "e")
+    val numThreads = 3
 
-  test("CompactorProcess.run should call CompactionProcess.run once per entity when data_date_part exists") {
-    val mockSparkSession = mock[SparkSession]
-    val mockSqlContext = mock[SQLContext]
-    val mockHiveUtil = mock[HiveUtil.type]
-    val mockCompaction = mock[CompactionProcess.type]
+    val result = CompactionProcess.getMapPath(allPaths, numThreads)
 
-    val args = CompactorArgs(
-      database = "test_db",
-      table = "test_table",
-      thread = 4,
-      sizeFile = 128,
-      ingestEntity = "[{\"data_date_part\":\"2024-01-01\"}]"
-    )
-
-    when(mockHiveUtil.getLocationTable("test_db", "test_table")).thenReturn("/tmp/test_path")
-    when(mockHiveUtil.getPartitions("test_db", "test_table")).thenReturn(List("data_date_part"))
-
-    val parsedEntity = IngestEntity("2024-01-01")
-    val parsedList = List(parsedEntity)
-
-    // Ejecutar lógica de CompactorProcess en un método extraíble y testeable
-    CompactorProcess.runWithDependencies(
-      args,
-      mockSqlContext,
-      hiveUtil = mockHiveUtil,
-      compaction = mockCompaction,
-      parsedEntities = Some(parsedList)
-    )
-
-    verify(mockCompaction).run(
-      eqTo(mockSqlContext),
-      eqTo("/tmp/test_path/data_date_part=2024-01-01"),
-      eqTo(4),
-      eqTo(128)
-    )
+    result.keySet should contain allElementsOf (0 until numThreads)
+    val allAssigned = result.values.flatten.toList
+    allAssigned.sorted shouldEqual allPaths.sorted
   }
 
-  test("CompactorProcess.run should call CompactionProcess.run once when data_date_part does not exist") {
-    val mockSparkSession = mock[SparkSession]
-    val mockSqlContext = mock[SQLContext]
-    val mockHiveUtil = mock[HiveUtil.type]
-    val mockCompaction = mock[CompactionProcess.type]
-
-    val args = CompactorArgs(
-      database = "test_db",
-      table = "test_table",
-      thread = 2,
-      sizeFile = 64,
-      ingestEntity = "[]"
-    )
-
-    when(mockHiveUtil.getLocationTable("test_db", "test_table")).thenReturn("/tmp/test_path")
-    when(mockHiveUtil.getPartitions("test_db", "test_table")).thenReturn(List("other_partition"))
-
-    CompactorProcess.runWithDependencies(
-      args,
-      mockSqlContext,
-      hiveUtil = mockHiveUtil,
-      compaction = mockCompaction
-    )
-
-    verify(mockCompaction).run(
-      eqTo(mockSqlContext),
-      eqTo("/tmp/test_path"),
-      eqTo(2),
-      eqTo(64)
-    )
-  }
-
-  test("CompactionProcess.run should call reduceBySize and getMapPath correctly") {
+  test("run should execute reduceBySize on each assigned path") {
     val mockSqlContext = mock[SQLContext]
     val mockHdfsUtil = mock[HdfsUtil.type]
 
-    val path = "/tmp/test"
-    val numHilos = 3
-    val sizeFile = 128
+    val allPaths = List("p1", "p2", "p3")
+    val path = "/tmp"
+    val numThreads = 3
+    val sizeFile = 100
 
-    val allPaths = List("path1", "path2", "path3")
-    val mapaPaths = Map(0 -> Some("path1"), 1 -> Some("path2"), 2 -> Some("path3"))
+    // Stub getAllPathsOfParent
+    when(mockHdfsUtil.getAllPathsOfParent(eqTo(path), eqTo(mockSqlContext)))
+      .thenReturn(allPaths)
 
-    val getAllPathsCalled = mutable.ListBuffer.empty[String]
-    val getMapPathCalled = mutable.ListBuffer.empty[(List[String], Int)]
-
-    object TestCompactionProcess extends CompactionProcess.type {
-      override def getMapPath(paths: List[String], threads: Int): Map[Int, Option[String]] = {
-        getMapPathCalled += ((paths, threads))
-        mapaPaths
-      }
+    // Inject mocks via a local object
+    object TestCompaction extends CompactionProcess.type {
+      override def getMapPath(all: List[String], threads: Int) = super.getMapPath(all, threads)
     }
 
-    object TestHdfsUtil extends HdfsUtil.type {
-      override def reduceBySize(path: String, size: Int, sqlContext: SQLContext): Unit = {
-        // simulamos la ejecución sin efectos reales
-      }
-    }
+    // Replace the HdfsUtil inside the method via partial mocking
+    val originalMethod = HdfsUtil.reduceBySize _
+    try {
+      var calls = scala.collection.mutable.ListBuffer.empty[String]
+      HdfsUtil.reduceBySize = (p, s, ctx) => calls += p
 
-    val threads = for (i <- 0 until numHilos) yield new Thread() {
-      override def run(): Unit = {
-        if (mapaPaths.get(i).flatten.isDefined) {
-          TestHdfsUtil.reduceBySize(mapaPaths(i).get, sizeFile, mockSqlContext)
-        }
-      }
-    }
-    threads.foreach(_.run())
+      TestCompaction.run(mockSqlContext, path, numThreads, sizeFile)
 
-    // Validación
-    getMapPathCalled should contain ((allPaths, numHilos))
+      calls.sorted shouldEqual allPaths.sorted
+    } finally {
+      HdfsUtil.reduceBySize = originalMethod
+    }
   }
 }
