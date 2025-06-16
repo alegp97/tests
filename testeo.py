@@ -2,13 +2,14 @@ import org.apache.spark.sql.{SQLContext, SparkSession}
 import org.apache.spark.sql.hive.test.TestHiveContext
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import com.santander.stresstest.compaction.CompactorProcess
-import com.santander.stresstest.util.HiveUtil
+import com.santander.stresstest.util.{HiveUtil, HdfsUtil}
 import com.santander.stresstest.process.CompactionProcess
 import com.santander.stresstest.entity.IngestEntity
 import com.santander.stresstest.parser.config.CompactorArgs
@@ -82,5 +83,36 @@ class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar w
       eqTo(2),
       eqTo(64)
     )
+  }
+
+  test("CompactionProcess.run should call reduceBySize in each thread") {
+    val mockSqlContext = mock[SQLContext]
+    val mockHdfsUtil = mock[HdfsUtil.type]
+
+    val path = "/tmp/test"
+    val numHilos = 3
+    val sizeFile = 128
+
+    val paths = List("path1", "path2", "path3")
+    val mapa = paths.zipWithIndex.map { case (p, i) => (i, Some(p)) }.toMap
+
+    val compaction = new Object {
+      def run(): Unit = {
+        val allPath = paths
+        val mapaHilos = mapa
+        val threads = for (i <- 0 to numHilos - 1 toList) yield new Thread() {
+          override def run(): Unit = {
+            if (mapaHilos.get(i).flatten.isDefined) {
+              mockHdfsUtil.reduceBySize(mapaHilos(i).get, sizeFile, mockSqlContext)
+            }
+          }
+        }
+        threads.foreach(_.run())
+      }
+    }
+
+    compaction.run()
+
+    verify(mockHdfsUtil, times(3)).reduceBySize(any[String], eqTo(sizeFile), eqTo(mockSqlContext))
   }
 }
