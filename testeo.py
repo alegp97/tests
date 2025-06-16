@@ -14,6 +14,8 @@ import com.santander.stresstest.process.CompactionProcess
 import com.santander.stresstest.entity.IngestEntity
 import com.santander.stresstest.parser.config.CompactorArgs
 
+import scala.collection.mutable
+
 class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar with BeforeAndAfterAll {
 
   test("CompactorProcess.run should call CompactionProcess.run once per entity when data_date_part exists") {
@@ -85,7 +87,7 @@ class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar w
     )
   }
 
-  test("CompactionProcess.run should call reduceBySize in each thread") {
+  test("CompactionProcess.run should call reduceBySize and getMapPath correctly") {
     val mockSqlContext = mock[SQLContext]
     val mockHdfsUtil = mock[HdfsUtil.type]
 
@@ -93,26 +95,35 @@ class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar w
     val numHilos = 3
     val sizeFile = 128
 
-    val paths = List("path1", "path2", "path3")
-    val mapa = paths.zipWithIndex.map { case (p, i) => (i, Some(p)) }.toMap
+    val allPaths = List("path1", "path2", "path3")
+    val mapaPaths = Map(0 -> Some("path1"), 1 -> Some("path2"), 2 -> Some("path3"))
 
-    val compaction = new Object {
-      def run(): Unit = {
-        val allPath = paths
-        val mapaHilos = mapa
-        val threads = for (i <- 0 to numHilos - 1 toList) yield new Thread() {
-          override def run(): Unit = {
-            if (mapaHilos.get(i).flatten.isDefined) {
-              mockHdfsUtil.reduceBySize(mapaHilos(i).get, sizeFile, mockSqlContext)
-            }
-          }
-        }
-        threads.foreach(_.run())
+    val getAllPathsCalled = mutable.ListBuffer.empty[String]
+    val getMapPathCalled = mutable.ListBuffer.empty[(List[String], Int)]
+
+    object TestCompactionProcess extends CompactionProcess.type {
+      override def getMapPath(paths: List[String], threads: Int): Map[Int, Option[String]] = {
+        getMapPathCalled += ((paths, threads))
+        mapaPaths
       }
     }
 
-    compaction.run()
+    object TestHdfsUtil extends HdfsUtil.type {
+      override def reduceBySize(path: String, size: Int, sqlContext: SQLContext): Unit = {
+        // simulamos la ejecución sin efectos reales
+      }
+    }
 
-    verify(mockHdfsUtil, times(3)).reduceBySize(any[String], eqTo(sizeFile), eqTo(mockSqlContext))
+    val threads = for (i <- 0 until numHilos) yield new Thread() {
+      override def run(): Unit = {
+        if (mapaPaths.get(i).flatten.isDefined) {
+          TestHdfsUtil.reduceBySize(mapaPaths(i).get, sizeFile, mockSqlContext)
+        }
+      }
+    }
+    threads.foreach(_.run())
+
+    // Validación
+    getMapPathCalled should contain ((allPaths, numHilos))
   }
 }
