@@ -1,70 +1,86 @@
-  test("run debe entrar en ambos else (JEJEJEJEJE y JAJAJAJAJAJAJA)") {
+import org.apache.spark.sql.{SQLContext, SparkSession}
+import org.apache.spark.sql.hive.test.TestHiveContext
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
 
-    // -- Mocks base ----------------------------------------------------------
-    val sqlContext = mock[SQLContext]
-    val settings   = mock[BoardsArgs]
+import com.santander.stresstest.compaction.CompactorProcess
+import com.santander.stresstest.util.HiveUtil
+import com.santander.stresstest.process.CompactionProcess
+import com.santander.stresstest.entity.IngestEntity
+import com.santander.stresstest.parser.config.CompactorArgs
 
-    val sourceDB     = "src_db"
-    val targetDB     = "tgt_db"
-    val prefix       = "mytable"
-    val inputExecDef = s"${prefix}_input"
-    val outputExecDef= s"${prefix}_output"
+class CompactorProcessSpec extends AnyFunSuite with Matchers with MockitoSugar with BeforeAndAfterAll {
 
-    when(settings.sourcedb).thenReturn(sourceDB)
-    when(settings.targetdb).thenReturn(targetDB)
-    when(settings.sourceTable).thenReturn(prefix)
+  test("CompactorProcess.run should call CompactionProcess.run once per entity when data_date_part exists") {
+    val mockSparkSession = mock[SparkSession]
+    val mockSqlContext = mock[SQLContext]
+    val mockHiveUtil = mock[HiveUtil.type]
+    val mockCompaction = mock[CompactionProcess.type]
 
-    val inputDF  = mock[DataFrame]
-    val outputDF = mock[DataFrame]
+    val args = CompactorArgs(
+      database = "test_db",
+      table = "test_table",
+      thread = 4,
+      sizeFile = 128,
+      ingestEntity = "[{\"data_date_part\":\"2024-01-01\"}]"
+    )
 
-    when(sqlContext.table(s"$targetDB.$inputExecDef")).thenReturn(inputDF)
-    when(sqlContext.table(s"$targetDB.$outputExecDef")).thenReturn(outputDF)
+    when(mockHiveUtil.getLocationTable("test_db", "test_table")).thenReturn("/tmp/test_path")
+    when(mockHiveUtil.getPartitions("test_db", "test_table")).thenReturn(List("data_date_part"))
 
-    when(inputDF.columns).thenReturn(Array("col_a", "col_b"))
-    when(outputDF.columns).thenReturn(Array("col_a", "col_b"))
+    val parsedEntity = IngestEntity("2024-01-01")
+    val parsedList = List(parsedEntity)
 
-    // -- Mock SHOW PARTITIONS ------------------------------------------------
-    val partitionsDF = mock[DataFrame]
-    val orderedDF    = mock[DataFrame]
-    val limitedDF    = mock[DataFrame]
-    val partitionRow = mock[Row]
+    // Ejecutar lógica de CompactorProcess en un método extraíble y testeable
+    CompactorProcess.runWithDependencies(
+      args,
+      mockSqlContext,
+      hiveUtil = mockHiveUtil,
+      compaction = mockCompaction,
+      parsedEntities = Some(parsedList)
+    )
 
-    when(partitionRow.getString(0)).thenReturn("20240601=value")
+    verify(mockCompaction).run(
+      eqTo(mockSqlContext),
+      eqTo("/tmp/test_path/data_date_part=2024-01-01"),
+      eqTo(4),
+      eqTo(128)
+    )
+  }
 
-    when(sqlContext.sql(contains("show partitions"))).thenReturn(partitionsDF)
-    when(partitionsDF.orderBy(any[org.apache.spark.sql.Column])).thenReturn(orderedDF)
-    when(orderedDF.limit(1)).thenReturn(limitedDF)
-    when(limitedDF.collect()).thenReturn(Array(partitionRow))
+  test("CompactorProcess.run should call CompactionProcess.run once when data_date_part does not exist") {
+    val mockSparkSession = mock[SparkSession]
+    val mockSqlContext = mock[SQLContext]
+    val mockHiveUtil = mock[HiveUtil.type]
+    val mockCompaction = mock[CompactionProcess.type]
 
-    // -- Mock fields_dict ----------------------------------------------------
-    val fieldsDictDF  = mock[DataFrame]
-    val filteredDF    = mock[DataFrame]
-    val selectedDF    = mock[DataFrame]
-    val distinctedDF  = mock[DataFrame]
+    val args = CompactorArgs(
+      database = "test_db",
+      table = "test_table",
+      thread = 2,
+      sizeFile = 64,
+      ingestEntity = "[]"
+    )
 
-    when(sqlContext.table(s"$sourceDB.fields_dict")).thenReturn(fieldsDictDF)
-    when(fieldsDictDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
-    when(filteredDF.where(any[org.apache.spark.sql.Column])).thenReturn(filteredDF)
-    when(filteredDF.select(any[org.apache.spark.sql.Column])).thenReturn(selectedDF)
-    when(selectedDF.distinct()).thenReturn(distinctedDF)
+    when(mockHiveUtil.getLocationTable("test_db", "test_table")).thenReturn("/tmp/test_path")
+    when(mockHiveUtil.getPartitions("test_db", "test_table")).thenReturn(List("other_partition"))
 
-    //  >>> Array vacío ← exec_in_columns = Seq.empty  → check = false
-    when(distinctedDF.collect()).thenReturn(Array.empty[Row])
+    CompactorProcess.runWithDependencies(
+      args,
+      mockSqlContext,
+      hiveUtil = mockHiveUtil,
+      compaction = mockCompaction
+    )
 
-    // -- Schema sin Decimal/Integer para forzar el segundo else --------------
-    val schema = StructType(Seq(
-      StructField("col_a", StringType),
-      StructField("col_b", BooleanType)
-    ))
-
-    when(inputDF.schema).thenReturn(schema)
-    when(outputDF.schema).thenReturn(schema)
-
-    // -- Ignoramos ejecución real de DROP / CREATE --------------------------
-    when(sqlContext.sql(startsWith("DROP VIEW"))).thenReturn(mock[DataFrame])
-    when(sqlContext.sql(startsWith("CREATE VIEW"))).thenReturn(mock[DataFrame])
-
-    // -- Ejecutar el job -----------------------------------------------------
-    GenerateExecutionDefViewJob.run(sqlContext, settings)
+    verify(mockCompaction).run(
+      eqTo(mockSqlContext),
+      eqTo("/tmp/test_path"),
+      eqTo(2),
+      eqTo(64)
+    )
   }
 }
