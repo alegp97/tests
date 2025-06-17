@@ -40,9 +40,9 @@ class BDRAggregationJobSpec extends AnyFunSuite with MockitoSugar {
   when(mockDF.count()).thenReturn(42L)
 
   // Encadenamiento de transformaciones comunes para evitar NPEs
-  when(mockDF.sort(anyVararg[String])).thenReturn(mockDF)
-  when(mockDF.sort(anyVararg[Column])).thenReturn(mockDF)
-  when(mockDF.select(anyVararg[Column])).thenReturn(mockDF)
+  when(mockDF.sort(any[Seq[String]]: _*)).thenReturn(mockDF)
+  when(mockDF.sort(any[Seq[Column]]: _*)).thenReturn(mockDF)
+  when(mockDF.select(any[Seq[Column]]: _*)).thenReturn(mockDF)
   when(mockDF.withColumn(anyString(), any())).thenReturn(mockDF)
   when(mockDF.withColumnRenamed(anyString(), anyString())).thenReturn(mockDF)
   when(mockDF.join(any[DataFrame], any(), anyString())).thenReturn(mockDF)
