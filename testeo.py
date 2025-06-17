@@ -40,13 +40,15 @@ class BDRAggregationJobSpec extends AnyFunSuite with MockitoSugar {
   when(mockDF.count()).thenReturn(42L)
 
   // Encadenamiento de transformaciones comunes para evitar NPEs
-  when(mockDF.sort(any[Seq[String]]: _*)).thenReturn(mockDF)
-  when(mockDF.sort(any[Seq[Column]]: _*)).thenReturn(mockDF)
-  when(mockDF.select(any[Seq[Column]]: _*)).thenReturn(mockDF)
+  when(mockDF.sort(any[Column])).thenReturn(mockDF)
+  when(mockDF.sort(any[Column], any[Column])).thenReturn(mockDF)
+  when(mockDF.select(any[Column])).thenReturn(mockDF)
+  when(mockDF.select(any[Column], any[Column])).thenReturn(mockDF)
   when(mockDF.withColumn(anyString(), any())).thenReturn(mockDF)
   when(mockDF.withColumnRenamed(anyString(), anyString())).thenReturn(mockDF)
-  when(mockDF.join(any[DataFrame], any(), anyString())).thenReturn(mockDF)
-  when(mockDF.filter(any())).thenReturn(mockDF)
+  when(mockDF.join(any[DataFrame], any[Column])).thenReturn(mockDF)
+  when(mockDF.join(any[DataFrame], any[Column], anyString())).thenReturn(mockDF)
+  when(mockDF.filter(any[Column])).thenReturn(mockDF)
 
   // Mock de groupBy → agg
   val mockGrouped = mock[RelationalGroupedDataset](withSettings().defaultAnswer(RETURNS_DEEP_STUBS))
