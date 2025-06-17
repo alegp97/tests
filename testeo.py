@@ -34,8 +34,24 @@ class BDRAggregationJobSpec extends AnyFunSuite with MockitoSugar {
   private val mockDF: DataFrame =
     mock[DataFrame](withSettings().defaultAnswer(RETURNS_DEEP_STUBS))
 
-  // Evitamos NPE cuando el job hace `df.columns.mkString(",")`
-  when(mockDF.columns).thenReturn(Array("dummyCol"))
+  val dummyCols = Array("col1", "col2", "col3")
+  when(mockDF.columns).thenReturn(dummyCols)
+  when(mockDF.columns.mkString(",")).thenReturn(dummyCols.mkString(","))
+  when(mockDF.count()).thenReturn(42L)
+
+  // Encadenamiento de transformaciones comunes para evitar NPEs
+  when(mockDF.sort(anyVararg[String])).thenReturn(mockDF)
+  when(mockDF.sort(anyVararg[Column])).thenReturn(mockDF)
+  when(mockDF.select(anyVararg[Column])).thenReturn(mockDF)
+  when(mockDF.withColumn(anyString(), any())).thenReturn(mockDF)
+  when(mockDF.withColumnRenamed(anyString(), anyString())).thenReturn(mockDF)
+  when(mockDF.join(any[DataFrame], any(), anyString())).thenReturn(mockDF)
+  when(mockDF.filter(any())).thenReturn(mockDF)
+
+  // Mock de groupBy → agg
+  val mockGrouped = mock[RelationalGroupedDataset](withSettings().defaultAnswer(RETURNS_DEEP_STUBS))
+  when(mockDF.groupBy(anyVararg[String])).thenReturn(mockGrouped)
+  when(mockGrouped.agg(any())).thenReturn(mockDF)
 
   // Todas las lecturas devuelven el mismo DataFrame mockeado
   when(sqlContext.table(anyString())).thenReturn(mockDF)
@@ -60,10 +76,7 @@ class BDRAggregationJobSpec extends AnyFunSuite with MockitoSugar {
     }
 
     // ---------- Verify (Mockito) ------------------------------------------
-    // 1️⃣ El job intenta leer alguna tabla de contratos
     verify(sqlContext, atLeastOnce()).table(contains("starting_points_contract"))
-
-    // 2️⃣ El job intenta escribir la tabla agregada
     verify(mockDF.write, atLeastOnce()).saveAsTable("targetdb.agg_table")
   }
 }
