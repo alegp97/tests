@@ -28,6 +28,12 @@ class BDRAggregationJobSpec extends AnyFunSuite with MockitoSugar {
   // Vinculamos el SQLContext mockeado a la SparkSession mockeada
   when(sparkMock.sqlContext).thenReturn(sqlContext)
 
+
+  val mockDFWithCols: DataFrame =
+    mock[DataFrame](withSettings().defaultAnswer(RETURNS_DEEP_STUBS))
+  when(mockDFWithCols.columns).thenReturn(dummyCols)
+  when(mockDFWithCols.count()).thenReturn(42L)
+
   // -------------------------------------------------------------------------
   // 🔧  Mock genérico de DataFrame (deep stubs) ------------------------------
   // -------------------------------------------------------------------------
