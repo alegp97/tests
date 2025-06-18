@@ -52,14 +52,12 @@ class BDRFlowsJobTest extends AnyFunSuite with MockitoSugar {
     val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
 
-    val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    // Usamos doReturn/when para evitar problemas de matchers mezclados
-    import scala.reflect.ClassTag
-    doReturn(dsStringMock)
-      .when(dsRowMock)
-      .map[String](any[scala.Function1[Row, String]]())(any[Encoder[String]]())
+        val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    // Stub directo con when(...).thenReturn(...) – evita ambigüedad de doReturn
+    when(dsRowMock.map[String](any[Function1[Row, String]]())(any[Encoder[String]]())).thenReturn(dsStringMock)
 
-    when(dsStringMock.collect()).thenReturn(Array("partition=2025-01-01"))
+    when(dsStringMock.collect()).thenReturn(Array("partition=2025-01-01"))()).thenReturn(Array("partition=2025-01-01"))
+
 
 
     // Ejecutar el método a testear
