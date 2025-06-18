@@ -12,24 +12,27 @@ import org.mockito.MockedStatic
 class BDRFlowsJobTest extends AnyFunSuite with MockitoSugar {
 
   test("BDRFlowsJob.run ejecuta correctamente y cubre la lógica principal") {
+    // ---------- Spark & SQL ----------
     implicit val spark: SparkSession = mock[SparkSession](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     val sqlContext = mock[SQLContext]
-    val dfMock = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-
-    // Spark y lectura parquet
     when(spark.sqlContext).thenReturn(sqlContext)
+
+    // ---------- Lectura parquet ----------
     val readerMock = mock[DataFrameReader](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     when(sqlContext.read).thenReturn(readerMock)
+    val dfMock = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     when(readerMock.format("parquet")).thenReturn(readerMock)
     when(readerMock.load(any[String])).thenReturn(dfMock)
 
-    // Mocks para DataFrame
+    // ---------- Stubs genéricos DataFrame ----------
     when(dfMock.withColumn(any[String], any[Column])).thenReturn(dfMock)
     when(dfMock.drop(any[String])).thenReturn(dfMock)
     when(dfMock.sort(any[Column], any[Column], any[Column])).thenReturn(dfMock)
-    when(dfMock.select(any(), anyVararg())).thenReturn(dfMock)
+    when(dfMock.select(any[Column])).thenReturn(dfMock)
+    when(dfMock.select(org.mockito.ArgumentMatchers.any(classOf[Array[Column]]): _*)).thenReturn(dfMock)
     when(dfMock.where(any[Column])).thenReturn(dfMock)
     when(dfMock.unionAll(any[DataFrame])).thenReturn(dfMock)
+
 
     // Write
     val dfWriterMock = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
