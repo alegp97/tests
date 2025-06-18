@@ -49,15 +49,17 @@ class BDRFlowsJobTest extends AnyFunSuite with MockitoSugar {
     when(fsMock.delete(any[Path], eq(true))).thenReturn(true)
 
     // ---------- Mock "show partitions … .map …" ----------
-    // La consulta devuelve un Dataset[Row]
     val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
 
-    // Necesitamos devolver un Dataset[String] tras el map
     val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    // Usamos doReturn/when para evitar problemas de matchers mezclados
+    import scala.reflect.ClassTag
     doReturn(dsStringMock)
       .when(dsRowMock)
-      .map[String](org.mockito.ArgumentMatchers.any[Function1[Row, String]]())(org.mockito.ArgumentMatchers.any[Encoder[String]]())
+      .map[String](any[scala.Function1[Row, String]]())(any[Encoder[String]]())
+
+    when(dsStringMock.collect()).thenReturn(Array("partition=2025-01-01"))
 
 
     // Ejecutar el método a testear
