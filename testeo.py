@@ -48,6 +48,13 @@ class BDRFlowsJobTest extends AnyFunSuite with MockitoSugar {
     when(fsMock.exists(any[Path])).thenReturn(true)
     when(fsMock.delete(any[Path], eq(true))).thenReturn(true)
 
+    // ---------- Mock constantes BDRUtils ----------
+    val staticBDR: MockedStatic[BDRUtils] = mockStatic(classOf[BDRUtils])
+    staticBDR.when(() => BDRUtils.tmpPath).thenReturn("/tmp/test/path")
+    staticBDR.when(() => BDRUtils.starting_points_contract).thenReturn("starting_points_contract")
+    staticBDR.when(() => BDRUtils.fecha._1).thenReturn("fecha")
+    staticBDR.when(() => BDRUtils.INTERVALO_CALCULO).thenReturn(1)
+
     // ---------- Mock "show partitions … .map …" ----------
     val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
     when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
