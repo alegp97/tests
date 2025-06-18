@@ -48,6 +48,18 @@ class BDRFlowsJobTest extends AnyFunSuite with MockitoSugar {
     when(fsMock.exists(any[Path])).thenReturn(true)
     when(fsMock.delete(any[Path], eq(true))).thenReturn(true)
 
+    // ---------- Mock "show partitions … .map …" ----------
+    // La consulta devuelve un Dataset[Row]
+    val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
+
+    // Necesitamos devolver un Dataset[String] tras el map
+    val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    doReturn(dsStringMock)
+      .when(dsRowMock)
+      .map[String](org.mockito.ArgumentMatchers.any[Function1[Row, String]]())(org.mockito.ArgumentMatchers.any[Encoder[String]]())
+
+
     // Ejecutar el método a testear
     BDRFlowsJob.run(
       sourcecb = "sourcedb",
