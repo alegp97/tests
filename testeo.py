@@ -8,3 +8,7 @@ java -jar ~/.m2/repository/org/jacoco/org.jacoco.cli/0.8.11/*.jar \
      --classfiles target/classes \
      --sourcefiles src/main/java \
      --html target/manual-report -v
+
+
+
+java -jar "C:\Users\x068801\.m2\repository\org\jacoco\org.jacoco.cli\0.8.11\org.jacoco.cli-0.8.11-nodeps.jar" execinfo target/jacoco.exec
