@@ -37,3 +37,43 @@ java -cp "C:\Users\x068801\.m2\repository\org\jacoco\org.jacoco.cli\0.8.11\org.j
     </sourceFiles>
   </configuration>
 </execution>
+
+
+
+
+
+
+
+
+<execution>
+  <id>jacoco-report</id>
+  <phase>verify</phase>
+  <goals>
+    <goal>report</goal>
+  </goals>
+  <configuration>
+    <classFiles>
+      <!-- Clases estándar compiladas -->
+      <param>${project.build.outputDirectory}</param>
+
+      <!-- Clases compiladas con plugin Scala -->
+      <param>${project.build.directory}/scala-*/classes</param>
+
+      <!-- JAR sombreado si existe -->
+      <param>${project.build.directory}/${project.build.finalName}.jar</param>
+    </classFiles>
+    <sourceFiles>
+      <param>src/main/scala</param>
+      <param>src/main/java</param>
+    </sourceFiles>
+    <excludes>
+      <exclude>**/eresearch/util/**</exclude>
+      <exclude>**/eresearch/**/config/**</exclude>
+      <exclude>**/boards/process/drop/**</exclude>
+      <exclude>**/vt/clean/log/**</exclude>
+      <exclude>**/update/**</exclude>
+      <exclude>**/exceptions/**</exclude>
+    </excludes>
+  </configuration>
+</execution>
+
