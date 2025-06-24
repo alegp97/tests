@@ -57,6 +57,16 @@ class BDRPreviewFlowsJobTest extends AnyFunSuite with MockitoSugar with BeforeAn
   when(fsMock.exists(any[Path])).thenReturn(true)
   when(fsMock.delete(any[Path], eqTo(true))).thenReturn(true)
 
+val scMock = mock[SparkContext](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+val hadoopConfMock = mock[org.apache.hadoop.conf.Configuration]
+
+when(sqlContext.sparkContext).thenReturn(scMock)
+when(scMock.hadoopConfiguration).thenReturn(hadoopConfMock)
+
+doNothing().when(hadoopConfMock).setInt(anyString(), anyInt())
+when(hadoopConfMock.get(anyString())).thenReturn("1048576")
+
+
   override protected def afterAll(): Unit = {
     staticHdfsMock.close()
   }
