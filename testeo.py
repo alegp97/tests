@@ -1,69 +1,93 @@
-  test("BDRFlowsJob.run ejecuta correctamente y cubre la lógica principal") {
-    // ---------- Spark & SQL ----------
-    implicit val spark: SparkSession = mock[SparkSession](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    val sqlContext = mock[SQLContext]
-    when(spark.sqlContext).thenReturn(sqlContext)
+class BDRPreviewFlowsJobTest extends AnyFunSuite with MockitoSugar with BeforeAndAfterAll {
 
-    // ---------- Lectura parquet ----------
-    val readerMock = mock[DataFrameReader](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    when(sqlContext.read).thenReturn(readerMock)
-    val dfMock = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    when(readerMock.format("parquet")).thenReturn(readerMock)
-    when(readerMock.load(any[String])).thenReturn(dfMock)
+  // ---------- Spark & SQL ----------
+  implicit val spark: SparkSession = mock[SparkSession](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  private val sqlContext: SQLContext  = mock[SQLContext]
+  when(spark.sqlContext).thenReturn(sqlContext)
 
-    // ---------- Stubs genéricos DataFrame ----------
-    when(dfMock.withColumn(any[String], any[Column])).thenReturn(dfMock)
-    when(dfMock.drop(any[String])).thenReturn(dfMock)
-    when(dfMock.sort(any(classOf[Array[Column]]): _*)).thenReturn(dfMock)
-    when(dfMock.select(any(classOf[Array[Column]]): _*)).thenReturn(dfMock)
-    when(dfMock.where(any[Column])).thenReturn(dfMock)
-    when(dfMock.unionAll(any[DataFrame])).thenReturn(dfMock)
+  // ---------- Lectura parquet ----------
+  private val readerMock: DataFrameReader = mock[DataFrameReader](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(sqlContext.read).thenReturn(readerMock)
 
-    // ---------- Write ----------
-    val writerMock = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    when(dfMock.write).thenReturn(writerMock)
-    when(writerMock.mode(SaveMode.Overwrite)).thenReturn(writerMock)
-    when(writerMock.format("parquet")).thenReturn(writerMock)
-    when(writerMock.saveAsTable(any[String])).thenReturn(())
+  private val dfMock: DataFrame = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(readerMock.format("parquet")).thenReturn(readerMock)
+  when(readerMock.load(any[String])).thenReturn(dfMock)
 
-    // ---------- HDFS ----------
-    val fsMock = mock[FileSystem]
-    val staticHdfs: MockedStatic[HDFSHandler] = mockStatic(classOf[HDFSHandler])
-    staticHdfs.when(() => HDFSHandler.getFileSystem(any[String])).thenReturn(fsMock)
-    when(fsMock.exists(any(classOf[Path]))).thenReturn(true)
-    when(fsMock.delete(any(classOf[Path]), meq(java.lang.Boolean.TRUE))).thenReturn(true)
+  // Acceso directo a tabla origen
+  when(sqlContext.table(any[String])).thenReturn(dfMock)
 
-    // ---------- Mock constantes BDRUtils ----------
-    val staticBDR: MockedStatic[BDRUtils] = mockStatic(classOf[BDRUtils])
-    staticBDR.when(() => BDRUtils.tmpPath).thenReturn("/tmp/test/path")
-    staticBDR.when(() => BDRUtils.starting_points_contract).thenReturn("starting_points_contract")
-    staticBDR.when(() => BDRUtils.fecha._1).thenReturn("fecha")
-    staticBDR.when(() => BDRUtils.INTERVALO_CALCULO).thenReturn(1)
+  // Persist / unpersist
+  when(dfMock.persist(StorageLevel.MEMORY_AND_DISK)).thenReturn(dfMock)
+  when(dfMock.unpersist()).thenReturn(dfMock)
 
-    // ---------- Mock "show partitions … .map …" ----------
-    val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
+  // ---------- Stubs genéricos de DataFrame ----------
+  // 129 columnas para activar el ajuste de block‑size
+  when(dfMock.columns).thenReturn(Array.fill(129)("col"))
+  when(dfMock.withColumn(any[String], any[classOf[org.apache.spark.sql.Column]])).thenReturn(dfMock)
+  when(dfMock.drop(any[String])).thenReturn(dfMock)
+  when(dfMock.sort(any[Seq[org.apache.spark.sql.Column]]: _*)).thenReturn(dfMock)
+  when(dfMock.select(any[org.apache.spark.sql.Column])).thenReturn(dfMock)
+  when(dfMock.select(any[Array[org.apache.spark.sql.Column]]: _*)).thenReturn(dfMock)
+  when(dfMock.where(any[org.apache.spark.sql.Column])).thenReturn(dfMock)
+  when(dfMock.unionAll(any[DataFrame])).thenReturn(dfMock)
 
-    val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-    when(dsRowMock.map[String](any[Function1[Row, String]]())(any[Encoder[String]]())).thenReturn(dsStringMock)
-    when(dsStringMock.collect()).thenReturn(Array("2025-01-01"))
+  // ---------- Mock "show partitions … .map …" ----------
+  private val dsRowMock: Dataset[Row] = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(sqlContext.sql(org.mockito.ArgumentMatchers.startsWith("show partitions"))).thenReturn(dsRowMock)
 
-    // ---------- Ejecución ----------
-    BDRFlowsJob.run(
-      sourcecb = "sourcedb",
-      targetdb = "targetdb",
-      targetTableOptionalName = "agg_table",
-      entities = List.empty,
-      extra_filter = "",
-      sourceTable = "starting_points_contract",
-      process = "FULL",
-      is_incremental = "false"
-    )
+  private val dsStringMock: Dataset[String] = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(dsRowMock.map[String](any[Function1[Row, String]])(any[org.apache.spark.sql.Encoder[String]])).thenReturn(dsStringMock)
+  // Partición única para que el while sea ejecutado al menos una vez
+  when(dsStringMock.collect()).thenReturn(Array("2025-01-01"))
 
-    // ---------- Verificaciones ----------
-    verify(writerMock, atLeastOnce()).saveAsTable(any[String])
+  // ---------- Escritura parquet ----------
+  private val dfWriterMock: DataFrameWriter[Row] = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(dfMock.write).thenReturn(dfWriterMock)
+  when(dfWriterMock.mode(SaveMode.Overwrite)).thenReturn(dfWriterMock)
+  when(dfWriterMock.format("parquet")).thenReturn(dfWriterMock)
+  when(dfWriterMock.partitionBy(any[String])).thenReturn(dfWriterMock)
+  doNothing().when(dfWriterMock).parquet(any[String])
 
-    // ---------- Cierre mocks estáticos ----------
-    staticHdfs.close()
-    staticBDR.close()
+  // ---------- Mock HDFS ----------
+  private val fsMock = mock[org.apache.hadoop.fs.FileSystem]
+  private val staticHdfsMock: MockedStatic[HDFSHandler] = mockStatic(classOf[HDFSHandler])
+  staticHdfsMock.when(() => HDFSHandler.getFileSystem(any[String])).thenReturn(fsMock)
+  when(fsMock.exists(any[Path])).thenReturn(true)
+  when(fsMock.delete(any[Path], eqTo(true))).thenReturn(true)
+
+  override protected def afterAll(): Unit = {
+    staticHdfsMock.close()
   }
+
+  // ----------------------------------------------------------------------------------
+  //                                         TEST
+  // ----------------------------------------------------------------------------------
+
+  test("BDRPreviewFlowsJob.run se ejecuta sin excepciones y realiza interacciones críticas") {
+
+    // ---------------- Act ----------------
+    noException shouldBe thrownBy {
+      BDRPreviewFlowsJob.run(
+        sourcedb                = "sourcedb",
+        targetdb                = "targetdb",
+        targetTableOptionalName = "agg_table",
+        entities                = List.empty,
+        extra_filter            = "*",
+        sourceTable             = "starting_points_contract",
+        process                 = "FULL",
+        is_incremental          = "false"
+      )
+    }
+
+    // ---------------- Assert -------------
+    // Verificamos que se tocaron los puntos clave del flujo
+    verify(sqlContext).table(org.mockito.ArgumentMatchers.contains("sp_contract")) // lectura tabla
+    verify(dfMock).persist(StorageLevel.MEMORY_AND_DISK)                            // persistencia
+    verify(fsMock).delete(any[Path], eqTo(true))                                    // limpieza HDFS
+    verify(dfWriterMock).partitionBy(any[String])                                   // particionamiento
+    verify(dfWriterMock).parquet(any[String])                                       // escritura parquet
+    // Ajuste de bloque —> columnas > 128
+    verify(spark.sqlContext.sparkContext.hadoopConfiguration)
+      .setInt(eqTo("parquet.block.size"), any[Int])
+  }
+}
