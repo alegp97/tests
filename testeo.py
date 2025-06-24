@@ -1,79 +1,69 @@
-# 1. Inspecciona el contenido
-java -jar ~/.m2/repository/org/jacoco/org.jacoco.cli/0.8.11/*.jar \
-     execinfo target/jacoco.exec
+  test("BDRFlowsJob.run ejecuta correctamente y cubre la lógica principal") {
+    // ---------- Spark & SQL ----------
+    implicit val spark: SparkSession = mock[SparkSession](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    val sqlContext = mock[SQLContext]
+    when(spark.sqlContext).thenReturn(sqlContext)
 
-# 2. Genera el informe en consola, modo verbose
-java -jar ~/.m2/repository/org/jacoco/org.jacoco.cli/0.8.11/*.jar \
-     report target/jacoco.exec \
-     --classfiles target/classes \
-     --sourcefiles src/main/java \
-     --html target/manual-report -v
+    // ---------- Lectura parquet ----------
+    val readerMock = mock[DataFrameReader](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(sqlContext.read).thenReturn(readerMock)
+    val dfMock = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(readerMock.format("parquet")).thenReturn(readerMock)
+    when(readerMock.load(any[String])).thenReturn(dfMock)
 
+    // ---------- Stubs genéricos DataFrame ----------
+    when(dfMock.withColumn(any[String], any[Column])).thenReturn(dfMock)
+    when(dfMock.drop(any[String])).thenReturn(dfMock)
+    when(dfMock.sort(any(classOf[Array[Column]]): _*)).thenReturn(dfMock)
+    when(dfMock.select(any(classOf[Array[Column]]): _*)).thenReturn(dfMock)
+    when(dfMock.where(any[Column])).thenReturn(dfMock)
+    when(dfMock.unionAll(any[DataFrame])).thenReturn(dfMock)
 
+    // ---------- Write ----------
+    val writerMock = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(dfMock.write).thenReturn(writerMock)
+    when(writerMock.mode(SaveMode.Overwrite)).thenReturn(writerMock)
+    when(writerMock.format("parquet")).thenReturn(writerMock)
+    when(writerMock.saveAsTable(any[String])).thenReturn(())
 
-java -cp "C:\Users\x068801\.m2\repository\org\jacoco\org.jacoco.cli\0.8.11\org.jacoco.cli-0.8.11.jar" org.jacoco.cli.internal.Main execinfo target/jacoco.exec
+    // ---------- HDFS ----------
+    val fsMock = mock[FileSystem]
+    val staticHdfs: MockedStatic[HDFSHandler] = mockStatic(classOf[HDFSHandler])
+    staticHdfs.when(() => HDFSHandler.getFileSystem(any[String])).thenReturn(fsMock)
+    when(fsMock.exists(any(classOf[Path]))).thenReturn(true)
+    when(fsMock.delete(any(classOf[Path]), meq(java.lang.Boolean.TRUE))).thenReturn(true)
 
-<execution>
-  <id>jacoco-report</id>
-  <phase>verify</phase>
-  <goals><goal>report</goal></goals>
+    // ---------- Mock constantes BDRUtils ----------
+    val staticBDR: MockedStatic[BDRUtils] = mockStatic(classOf[BDRUtils])
+    staticBDR.when(() => BDRUtils.tmpPath).thenReturn("/tmp/test/path")
+    staticBDR.when(() => BDRUtils.starting_points_contract).thenReturn("starting_points_contract")
+    staticBDR.when(() => BDRUtils.fecha._1).thenReturn("fecha")
+    staticBDR.when(() => BDRUtils.INTERVALO_CALCULO).thenReturn(1)
 
-  <configuration>
-    <!-- 1. carpeta de salida Java normal -->
-    <classFiles>
-      <param>${project.build.outputDirectory}</param>
+    // ---------- Mock "show partitions … .map …" ----------
+    val dsRowMock = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(sqlContext.sql(any[String])).thenReturn(dsRowMock)
 
-      <!-- 2. carpetas Scala (todas las versiones) -->
-      <param>${project.build.directory}/scala-*/classes</param>
+    val dsStringMock = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(dsRowMock.map[String](any[Function1[Row, String]]())(any[Encoder[String]]())).thenReturn(dsStringMock)
+    when(dsStringMock.collect()).thenReturn(Array("2025-01-01"))
 
-      <!-- 3. el/los JARs generados por shade -->
-      <param>${project.build.directory}/${project.build.finalName}-*.jar</param>
-    </classFiles>
+    // ---------- Ejecución ----------
+    BDRFlowsJob.run(
+      sourcecb = "sourcedb",
+      targetdb = "targetdb",
+      targetTableOptionalName = "agg_table",
+      entities = List.empty,
+      extra_filter = "",
+      sourceTable = "starting_points_contract",
+      process = "FULL",
+      is_incremental = "false"
+    )
 
-    <!-- Si quieres que enlace al código Scala -->
-    <sourceFiles>
-      <param>src/main/scala</param>
-      <param>src/main/java</param>
-    </sourceFiles>
-  </configuration>
-</execution>
+    // ---------- Verificaciones ----------
+    verify(writerMock, atLeastOnce()).saveAsTable(any[String])
 
-
-
-
-
-
-
-
-<execution>
-  <id>jacoco-report</id>
-  <phase>verify</phase>
-  <goals>
-    <goal>report</goal>
-  </goals>
-  <configuration>
-    <classFiles>
-      <!-- Clases estándar compiladas -->
-      <param>${project.build.outputDirectory}</param>
-
-      <!-- Clases compiladas con plugin Scala -->
-      <param>${project.build.directory}/scala-*/classes</param>
-
-      <!-- JAR sombreado si existe -->
-      <param>${project.build.directory}/${project.build.finalName}.jar</param>
-    </classFiles>
-    <sourceFiles>
-      <param>src/main/scala</param>
-      <param>src/main/java</param>
-    </sourceFiles>
-    <excludes>
-      <exclude>**/eresearch/util/**</exclude>
-      <exclude>**/eresearch/**/config/**</exclude>
-      <exclude>**/boards/process/drop/**</exclude>
-      <exclude>**/vt/clean/log/**</exclude>
-      <exclude>**/update/**</exclude>
-      <exclude>**/exceptions/**</exclude>
-    </excludes>
-  </configuration>
-</execution>
-
+    // ---------- Cierre mocks estáticos ----------
+    staticHdfs.close()
+    staticBDR.close()
+  }
