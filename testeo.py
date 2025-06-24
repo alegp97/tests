@@ -36,8 +36,10 @@ class BDRPreviewFlowsJobTest extends AnyFunSuite with MockitoSugar with BeforeAn
   when(sqlContext.sql(org.mockito.ArgumentMatchers.startsWith("show partitions"))).thenReturn(dsRowMock)
 
   private val dsStringMock: Dataset[String] = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-  when(dsRowMock.map[String](any[Function1[Row, String]])(any[org.apache.spark.sql.Encoder[String]])).thenReturn(dsStringMock)
-  // Partición única para que el while sea ejecutado al menos una vez
+  import org.apache.spark.sql.Encoders
+  implicit val stringEnc: Encoder[String] = Encoders.STRING
+  // Stub de dsRowMock.map { r => r.getString(0) }
+  when(dsRowMock.map[String](any[Row => String])(eqTo(stringEnc))).thenReturn(dsStringMock)
   when(dsStringMock.collect()).thenReturn(Array("2025-01-01"))
 
   // ---------- Escritura parquet ----------
