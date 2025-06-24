@@ -57,14 +57,16 @@ class BDRPreviewFlowsJobTest extends AnyFunSuite with MockitoSugar with BeforeAn
   when(fsMock.exists(any[Path])).thenReturn(true)
   when(fsMock.delete(any[Path], eqTo(true))).thenReturn(true)
 
-  // ---------- HDFS ----------
-  val fsMock: FileSystem = mock[FileSystem]
-  when(fsMock.exists(ArgumentMatchers.any[Path])).thenReturn(true)
-  when(fsMock.delete(ArgumentMatchers.any[Path], ArgumentMatchers.eq(true))).thenReturn(true)
+  // Sustituto del HDFSHandler estático
+  val fsMock = mock[org.apache.hadoop.fs.FileSystem]
+  when(fsMock.exists(any[org.apache.hadoop.fs.Path])).thenReturn(true)
+  when(fsMock.delete(any[org.apache.hadoop.fs.Path], eqTo(true))).thenReturn(true)
 
-  /** Provider “falso” que devuelve nuestro `fsMock`. */
-  implicit val providerMock: FileSystemProvider = (_: String) => fsMock
-
+  // Sustituto testable de la clase principal
+  object TestableBDRPreviewFlowsJob extends BDRPreviewFlowsJob {
+    override def getFileSystem(path: String): org.apache.hadoop.fs.FileSystem = fsMock
+    override def spark: SparkSession = BDRPreviewFlowsJobTest.this.spark
+  }
 
 
   override protected def afterAll(): Unit = {
