@@ -1,15 +1,14 @@
 val azureStatic = mockStatic(classOf[AzureEmailSender])
 
-// 2️⃣  stub: TODOS los argumentos son matchers, firma idéntica
 azureStatic
-  .when(() =>
+  .when(() =>                                 // 1️⃣ método estático
     AzureEmailSender.sendEmail(
-      anyString(),                       // subject
-      anyString(),                       // body
-      any(classOf[Array[String]]),       // to
-      any(classOf[Array[String]]),       // cc
-      any(classOf[Array[String]]),       // bcc
-      any(classOf[Array[String]])        // attachments
+      any[String],            // subject     (matcher)
+      any[String],            // body        (matcher)
+      any[Array[String]],     // to          (matcher)
+      any[Array[String]],     // cc
+      any[Array[String]],     // bcc
+      any[Array[String]]      // attachments
     )
   )
-  .thenAnswer(_ => ())
+  .thenAnswer(_ => ())   
