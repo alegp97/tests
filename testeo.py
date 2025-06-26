@@ -120,3 +120,98 @@ private def dfMock(name: String): DataFrame =
     succeed()  // Si llegó aquí, no hubo NPE ⇢ test OK
   }
 }
+
+
+
+
+
+
+
+          test("run debe construir newNotifications y escribirlas (con mocks)") {
+
+    // ---------- Spark / SQLContext ----------
+    val sparkMock      = mock[SparkSession](RETURNS_DEEP_STUBS)
+    val sqlContextMock = mock[SQLContext](RETURNS_DEEP_STUBS)
+    when(sparkMock.sqlContext).thenReturn(sqlContextMock)
+
+    // ---------- DataFrames ----------
+    val versionsDF              = dfMock("versionsDF")
+    val timestampDF             = dfMock("timestampDF")
+    val versionMaxDF            = dfMock("versionMaxDF")
+    val versionMinDF            = dfMock("versionMinDF")
+    val onlyNewDF               = dfMock("onlyNewDF")
+    val dfSave                  = dfMock("dfSave")
+    val notificationsEnviadasDF = dfMock("notificationsEnviadasDF")
+    val newNotificationsDF      = dfMock("newNotificationsDF")
+    val dfWriter                = mock[DataFrameWriter[Row]](RETURNS_DEEP_STUBS)
+
+    // ---------- Tabla commondb.versions: 4 accesos en orden ----------
+    when(sqlContextMock.table(anyArg[String]))
+      .thenAnswer { inv =>
+        val tbl = inv.getArgument
+        if (tbl.startsWith("commondb.versions"))
+          Seq(versionsDF, timestampDF, versionMaxDF, versionMinDF).headOption.get
+        else notificationsEnviadasDF
+      }
+      .thenReturn(versionsDF, timestampDF, versionMaxDF, versionMinDF)   // 4 devoluciones
+    // 5º acceso: notification_sent
+    when(sqlContextMock.table("targetdb.notification_sent"))
+      .thenReturn(notificationsEnviadasDF)
+
+    // ---------- Stubs comunes ----------
+    for (df <- Seq(versionsDF, timestampDF, versionMaxDF, versionMinDF,
+                   onlyNewDF, dfSave, notificationsEnviadasDF, newNotificationsDF)) {
+
+      when(df.alias(anyArg[String])).thenReturn(df)
+      when(df.select(anyArg[Seq[Column]]: _*)).thenReturn(df)
+      when(df.select(anyArg[Column])).thenReturn(df)
+      when(df.where(anyArg[Column])).thenReturn(df)
+      when(df.distinct()).thenReturn(df)
+      when(df.orderBy(anyArg[Column])).thenReturn(df)
+      when(df.limit(anyArg[Int])).thenReturn(df)
+      when(df.except(anyArg[DataFrame])).thenReturn(df)
+      when(df.union(anyArg[DataFrame])).thenReturn(df)
+      when(df.unionAll(anyArg[DataFrame])).thenReturn(df)
+      when(df.repartition(anyArg[Int])).thenReturn(df)
+      when(df.columns).thenReturn(Array("colA", "colB"))
+    }
+
+    // --- Datos simulados que necesita la lógica ---
+    // Un único par (unit, entity)
+    val rowUnit = mock[Row]
+    when(rowUnit.getAs[String]("unit_id")).thenReturn("U1")
+    when(rowUnit.getAs[String]("entity_id")).thenReturn("E1")
+    when(versionsDF.collect()).thenReturn(Array(rowUnit))
+
+    // Dos timestamps: max = 20230202L, min = 20230101L
+    def tsRow(v: Long) = {
+      val r = mock[Row]; when(r.getAs[Long]("dataTimestampPart")).thenReturn(v); r
+    }
+    when(timestampDF.collect()).thenReturn(Array(tsRow(20230202L), tsRow(20230101L)))
+
+    // max – min → onlyNewDF
+    when(versionMaxDF.except(same(versionMinDF))).thenReturn(onlyNewDF)
+
+    // Accumulador dfSave = onlyNewDF
+    when(dfSave.unionAll(same(onlyNewDF))).thenReturn(dfSave)
+
+    // join con notification_sent → newNotificationsDF
+    when(dfSave.join(
+           same(notificationsEnviadasDF),     // DF
+           anyArg[Column],                    // condición
+           argEq("left")                      // tipo join
+         )).thenReturn(newNotificationsDF)
+
+    // chain posterior
+    when(newNotificationsDF.write).thenReturn(dfWriter)
+    when(dfWriter.mode(SaveMode.Append)).thenReturn(dfWriter)
+
+    // ---------- Ejecutar ----------
+    implicit val spark: SparkSession = sparkMock
+
+    GenerateNotification.run(
+      data_date_part      = "20230101",
+      data_timestamp_part = "20230202123456",
+      commondb            = "commondb",
+      targetdb            = "targetdb"
+    )
