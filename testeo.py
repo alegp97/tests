@@ -9,3 +9,8 @@ val small = List(colB)
 
 val result = BoardDataUtil.columnNotInColumn(big, small)
 assert(result.map(_.toString) == List("a"))
+
+
+System.setProperty("HADOOP_HOME", "/tmp")  // o cualquier path
+System.setProperty("hadoop.home.dir", "/tmp")
+new java.io.File("/tmp/bin").mkdirs()      
