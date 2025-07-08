@@ -24,8 +24,9 @@ test("validation_period dispatcher e inner funcionan correctamente con mocks") {
   when(mockDF.count()).thenReturn(2L)
 
   // .agg(...) para min_end_date
-  when(mockDF.agg(any[Column])).thenReturn(mockAggDF)
-  when(mockAggDF.as(any[String])).thenReturn(mockAggDF)
+when(mockAggDF.head()).thenReturn(mockRow)
+when(mockDF.agg(any[Column])).thenReturn(mockAggDF)
+
 
   // columnas, write
   when(mockDF.columns).thenReturn(Array("c1", "c2"))
