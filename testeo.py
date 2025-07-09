@@ -1,52 +1,40 @@
-test("validation_period dispatcher e inner funcionan correctamente con mocks") {
-  // Stubs adicionales necesarios
-  val mockDFGranularityFiltered = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockAggDF                 = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockWriter                = mock[DataFrameWriter[Row]]
-  val mockRow                   = mock[Row]
-  val mockDFSelected            = mock[DataFrame](RETURNS_DEEP_STUBS)
+test("validation_period - FIRST_AND_SECOND ejecuta correctamente join y drop") {
+  // Mocks necesarios
+  val mockFilteredDF      = mock[DataFrame](RETURNS_DEEP_STUBS)
+  val mockFirstTwoEndDate = mock[DataFrame](RETURNS_DEEP_STUBS)
+  val mockJoinedDF        = mock[DataFrame](RETURNS_DEEP_STUBS)
+  val mockDroppedDF       = mock[DataFrame](RETURNS_DEEP_STUBS)
+  val mockWriter          = mock[DataFrameWriter[Row]]
+  val mockRow             = mock[Row]
 
-  // selectPkValue
-  when(ValFunUtil.selectPkValue(mockDF, "colX")).thenReturn(mockDF)
+  // st_metrics_input.filter → devuelve filtrado
+  when(mockDF.filter(any[Column])).thenReturn(mockFilteredDF)
+  when(mockFilteredDF.count()).thenReturn(1L) // Para entrar al if
 
-  // filter → persist
-  when(mockDF.filter(any[Column])).thenReturn(mockDFGranularityFiltered)
-  when(mockDFGranularityFiltered.persist(any())).thenReturn(mockDFGranularityFiltered)
+  // firstTwoEndDate = select(...).distinct().orderBy(...).limit(2)
+  when(mockFilteredDF.select(any[Column])).thenReturn(mockFirstTwoEndDate)
+  when(mockFirstTwoEndDate.distinct()).thenReturn(mockFirstTwoEndDate)
+  when(mockFirstTwoEndDate.orderBy(any[Column])).thenReturn(mockFirstTwoEndDate)
+  when(mockFirstTwoEndDate.limit(2)).thenReturn(mockFirstTwoEndDate)
 
-  // agg → para min_end_date y max_end_date
-  when(mockDFGranularityFiltered.agg(any[Column])).thenReturn(mockAggDF)
-  when(mockAggDF.head()).thenReturn(mockRow)
-  when(mockRow.getString(0)).thenReturn("2025-01-01")
+  // join de stMetricsInputWithGranularity.join(firstTwoEndDate, cond)
+  when(mockFilteredDF.col("end_date")).thenReturn(mock[Column])
+  when(mockFirstTwoEndDate.col("end_date")).thenReturn(mock[Column])
+  when(mockFilteredDF.join(eqTo(mockFirstTwoEndDate), any[Column])).thenReturn(mockJoinedDF)
 
-  // select → distinct → orderBy → limit → head → getString → para max_end_date
-  when(mockDFGranularityFiltered.select(any[Column])).thenReturn(mockDFSelected)
-  when(mockDFSelected.distinct()).thenReturn(mockDFSelected)
-  when(mockDFSelected.orderBy(any[Column])).thenReturn(mockDFSelected)
-  when(mockDFSelected.limit(anyInt())).thenReturn(mockDFSelected)
-  when(mockDFSelected.head()).thenReturn(mockRow)
-  when(mockRow.getString(0)).thenReturn("2025-01-31")
+  // drop(...)
+  when(mockJoinedDF.drop(any[Column])).thenReturn(mockDroppedDF)
 
-  // count() del DF filtrado con granularidad
-  when(mockDFGranularityFiltered.count()).thenReturn(2L)
+  // Simular persistencia y escritura
+  when(mockDroppedDF.persist(any())).thenReturn(mockDroppedDF)
+  when(mockDroppedDF.where(any[Column])).thenReturn(mockDroppedDF)
+  when(mockDroppedDF.count()).thenReturn(1L)
+  when(ValFunUtil.selectPkValue(mockDroppedDF, "colX")).thenReturn(mockDroppedDF)
 
-  // where, join y demás stubs genéricos para campos
-  when(mockDFGranularityFiltered.where(any[Column])).thenReturn(mockDFGranularityFiltered)
-  when(mockDFGranularityFiltered.join(any[DataFrame], any[Column])).thenReturn(mockDFGranularityFiltered)
-
-  // write de Drilldown
-  when(mockDF.columns).thenReturn(Array("colX"))
-  when(mockDF.write).thenReturn(mockWriter)
+  when(mockDroppedDF.columns).thenReturn(Array("colX"))
+  when(mockDroppedDF.write).thenReturn(mockWriter)
   when(mockWriter.insertInto(any[String])).thenReturn(())
 
-  // llamada real
-  ValFunUtil.validation_period(
-    st_metrics_input = mockDF,
-    dateLoad         = "20250101",
-    timestamp        = "20250101120000",
-    targetdb         = "targetdb",
-    targetTable      = "targetTable",
-    fields           = mutable.HashMap("daily" -> List("colX")),
-    type_period      = "MIDDLE",
-    variables        = List("daily")
-  )
-}
+  // Mock fecha en head()
+  when(mockDroppedDF.head()).thenReturn(mockRow)
+  when(mockRo
