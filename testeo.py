@@ -37,4 +37,19 @@ test("validation_period - FIRST_AND_SECOND ejecuta correctamente join y drop") {
 
   // Mock fecha en head()
   when(mockDroppedDF.head()).thenReturn(mockRow)
-  when(mockRo
+  when(mockRow.getString(0)).thenReturn("2025-01-01")
+
+  // Ejecutar
+  ValFunUtil.validation_period(
+    st_metrics_input = mockDF,
+    min_end_date     = mockDroppedDF,
+    max_end_date     = mockDroppedDF,
+    dateLoad         = "20250101",
+    timestamp        = "20250101120000",
+    targetdb         = "targetdb",
+    targetTable      = "targetTable",
+    fields           = List("colX"),
+    type_period      = "FIRST_AND_SECOND",
+    variables        = List("daily")
+  )
+}
