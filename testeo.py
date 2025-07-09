@@ -1,36 +1,53 @@
-test("validation_end_date cubre todos los casos de tipo_end_date") {
-  val mockDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
-  val mockFilteredDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
-  val mockFieldVal = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
-  val mockWriter = mock(classOf[DataFrameWriter[Row]], RETURNS_DEEP_STUBS)
+test("All validations should execute without error") {
+  // Validaciones que no requieren lógica adicional ni verify
+  ValFunUtil.validation_numeric_data_type(
+    mockDF, "targetdb", "targetTable", List("col1"), "20250101", "20250101120000"
+  )
 
-  // Columnas simuladas para concat_ws
-  when(mockFieldVal.columns).thenReturn(Array("col1", "col2"))
-  when(mockFieldVal.apply("col1")).thenReturn(col("col1"))
-  when(mockFieldVal.apply("col2")).thenReturn(col("col2"))
+  ValFunUtil.validation_greater_equal_values(
+    mockDF, "targetdb", "targetTable", Map("col1" -> 3.0f), "20250101", "20250101120000"
+  )
 
-  // Encadenamiento de DataFrame para los filtros y selects
-  when(mockDF.filter(any[Column])).thenReturn(mockFilteredDF)
-  when(mockFilteredDF.filter(any[Column])).thenReturn(mockFieldVal)
-  when(mockFieldVal.select(any[Column])).thenReturn(mockFieldVal)
-  when(mockFieldVal.write).thenReturn(mockWriter)
-  when(mockWriter.insertInto(any[String])).thenReturn(())
+  ValFunUtil.validation_range_values(
+    mockDF, "targetdb", "targetTable", Map("col1" -> (1.0f, 5.0f)), "20250101", "20250101120000"
+  )
 
-  // Stub del método selectPkValue para devolver el DataFrame procesado
-  when(ValFunUtil.selectPkValue(mockFilteredDF, "fecha")).thenReturn(mockFieldVal)
+  ValFunUtil.validation_period_BaseYear(
+    mockDF, "20250101", "20250101120000", "targetdb", "targetTable",
+    new java.util.HashMap[String, java.util.List[String]] {{
+      put("type", java.util.Arrays.asList("col1"))
+    }},
+    "type", List("val1"), baseYear = true
+  )
 
-  val tipos = Seq("QUARTERLY", "YEARLY", "MONTHLY", "WEEKLY") // WEEKLY cubre el else final
+  ValFunUtil.validation_granInput_granOutput_range_value(
+    mockDF, "targetdb", "targetTable", List("col1"), List("A"), List("B"),
+    min_range = 1.0, max_range = 5.0,
+    baseYear = false, dateLoad = "20250101", timestamp = "20250101120000"
+  )
 
-  tipos.foreach { tipo =>
-    ValFunUtil.validation_end_date(
-      st_metrics_input = mockDF,
-      targetdb = "targetdb",
-      targetTable = "targetTable",
-      field = "fecha",
-      variables = List("var1"),
-      type_end_date = tipo,
-      dateLoad = "20250101",
-      timestamp = "20250101120000"
-    )
-  }
+  ValFunUtil.validate_granularity_input_type_contains(
+    mockDF, "targetdb", "targetTable", "A", "20250101", "20250101120000"
+  )
+
+  ValFunUtil.validate_less_value(
+    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
+    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
+  )
+
+  ValFunUtil.validate_equal_value(
+    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
+    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
+  )
+
+  ValFunUtil.validate_greater_equal_value(
+    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
+    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
+  )
+
+  ValFunUtil.validate_range_value(
+    mockDF, "targetdb", "targetTable", List("col1"),
+    min_range = 1.0, max_range = 5.0,
+    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
+  )
 }
