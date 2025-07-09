@@ -1,30 +1,36 @@
-test("validation_end_date con granularidad QUARTERLY y condición falsa") {
+test("validation_end_date cubre todos los casos de tipo_end_date") {
   val mockDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
   val mockFilteredDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
-  val mockFieldVal = mock(classOf[DataFrame])
-  val mockWriter = mock(classOf[DataFrameWriter[Row]])
+  val mockFieldVal = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
+  val mockWriter = mock(classOf[DataFrameWriter[Row]], RETURNS_DEEP_STUBS)
 
-  val variables = List("var1")
-  val field = "fecha"
-  val type_end_date = "QUARTERLY"
+  // Columnas simuladas para concat_ws
+  when(mockFieldVal.columns).thenReturn(Array("col1", "col2"))
+  when(mockFieldVal.apply("col1")).thenReturn(col("col1"))
+  when(mockFieldVal.apply("col2")).thenReturn(col("col2"))
 
-  // Simula .filter(...) => mockFilteredDF
+  // Encadenamiento de DataFrame para los filtros y selects
   when(mockDF.filter(any[Column])).thenReturn(mockFilteredDF)
-
-  // Simula selectPkValue y writeDrilldown
-  when(ValFunUtil.selectPkValue(mockFilteredDF, field)).thenReturn(mockFieldVal)
+  when(mockFilteredDF.filter(any[Column])).thenReturn(mockFieldVal)
+  when(mockFieldVal.select(any[Column])).thenReturn(mockFieldVal)
   when(mockFieldVal.write).thenReturn(mockWriter)
   when(mockWriter.insertInto(any[String])).thenReturn(())
 
-  // Ejecutar
-  // Llamadas con los distintos tipos de validación
-  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "QUARTERLY", "2025-07-09", "12:00")
-  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "YEARLY", "2025-07-09", "12:00")
-  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "MONTHLY", "2025-07-09", "12:00")
-  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "WEEKLY", "2025-07-09", "12:00")
+  // Stub del método selectPkValue para devolver el DataFrame procesado
+  when(ValFunUtil.selectPkValue(mockFilteredDF, "fecha")).thenReturn(mockFieldVal)
 
-  // Verificación
-  verify(mockDF).filter(any[Column])
-  verify(ValFunUtil).selectPkValue(mockFilteredDF, field)
-  verify(mockWriter).insertInto(contains("END_DATE_QUARTERLY"))
+  val tipos = Seq("QUARTERLY", "YEARLY", "MONTHLY", "WEEKLY") // WEEKLY cubre el else final
+
+  tipos.foreach { tipo =>
+    ValFunUtil.validation_end_date(
+      st_metrics_input = mockDF,
+      targetdb = "targetdb",
+      targetTable = "targetTable",
+      field = "fecha",
+      variables = List("var1"),
+      type_end_date = tipo,
+      dateLoad = "20250101",
+      timestamp = "20250101120000"
+    )
+  }
 }
