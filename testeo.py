@@ -1,53 +1,34 @@
-test("All validations should execute without error") {
-  // Validaciones que no requieren lógica adicional ni verify
-  ValFunUtil.validation_numeric_data_type(
-    mockDF, "targetdb", "targetTable", List("col1"), "20250101", "20250101120000"
-  )
+test("Validation - Basic and Granularity Dataset Functions") {
+  val mockMap: HashMap[String, List[String]] = HashMap("type" -> List("val1"))
+  val mockList: List[String] = List("val1")
+  val mockFields: List[String] = List("field1", "field2")
 
-  ValFunUtil.validation_greater_equal_values(
-    mockDF, "targetdb", "targetTable", Map("col1" -> 3.0f), "20250101", "20250101120000"
-  )
-
-  ValFunUtil.validation_range_values(
-    mockDF, "targetdb", "targetTable", Map("col1" -> (1.0f, 5.0f)), "20250101", "20250101120000"
-  )
-
-  ValFunUtil.validation_period_BaseYear(
-    mockDF, "20250101", "20250101120000", "targetdb", "targetTable",
-    new java.util.HashMap[String, java.util.List[String]] {{
-      put("type", java.util.Arrays.asList("col1"))
-    }},
-    "type", List("val1"), baseYear = true
-  )
-
-  ValFunUtil.validation_granInput_granOutput_range_value(
-    mockDF, "targetdb", "targetTable", List("col1"), List("A"), List("B"),
-    min_range = 1.0, max_range = 5.0,
-    baseYear = false, dateLoad = "20250101", timestamp = "20250101120000"
-  )
-
-  ValFunUtil.validate_granularity_input_type_contains(
-    mockDF, "targetdb", "targetTable", "A", "20250101", "20250101120000"
-  )
-
-  ValFunUtil.validate_less_value(
-    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
-    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
-  )
-
-  ValFunUtil.validate_equal_value(
-    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
-    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
-  )
-
-  ValFunUtil.validate_greater_equal_value(
-    mockDF, "targetdb", "targetTable", List("col1"), value = 5.0,
-    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
-  )
-
-  ValFunUtil.validate_range_value(
-    mockDF, "targetdb", "targetTable", List("col1"),
-    min_range = 1.0, max_range = 5.0,
-    baseYear = false, fieldCond = "A", dateLoad = "20250101", timestamp = "20250101120000"
-  )
+  ValFunUtil.validation_workspace_business_unit(mockDF, "20250101", "20250101120000", "targetdb", "targetTable", mockMap, mockList)
+  ValFunUtil.validation_granularity_input_dataset(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_dataset_inclusive(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_dataset_lowercase(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_NotNull(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_NotNullString(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_null(mockDF, "targetdb", "targetTable", "field1", mockList, "20250101", "20250101120000")
 }
+
+
+test("Validation - Functional, NotNull and Combined Granularity") {
+  val mockList: List[String] = List("val1")
+  val mockFields: List[String] = List("field1", "field2")
+
+  ValFunUtil.validation_granInput_granOutput_NotNull(mockDF, "targetdb", "targetTable", mockFields, mockList, mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granInput_granOutput_functional_range(mockDF, "targetdb", "targetTable", "field1", mockList, mockList, false, "20250101", "20250101120000")
+  ValFunUtil.validation_granInput_granOutput_functional_range(mockDF, "targetdb", "targetTable", "field1", mockList, mockList, true, "20250101", "20250101120000")
+  ValFunUtil.validation_functional_range(mockDF, "targetdb", "targetTable", "field1", mockList, true, "20250101", "20250101120000")
+  ValFunUtil.validation_functional_range(mockDF, "targetdb", "targetTable", "field1", mockList, false, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_functional_range(mockDF, "targetdb", "targetTable", "field1", mockFields, true, mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_functional_range(mockDF, "targetdb", "targetTable", "field1", mockFields, false, mockList, "20250101", "20250101120000")
+  ValFunUtil.validation_NullString(mockDF, "targetdb", "targetTable", "field1", "20250101", "20250101120000")
+  ValFunUtil.validation_NotNullAndNullString(mockDF, "targetdb", "targetTable", "field1", "20250101", "20250101120000")
+  ValFunUtil.validation_fields_NotNull(mockDF, "targetdb", "targetTable", mockFields, true, "20250101", "20250101120000")
+  ValFunUtil.validation_fields_NotNull(mockDF, "targetdb", "targetTable", mockFields, false, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_fieldsNotNull(mockDF, "targetdb", "targetTable", mockFields, mockList, true, "20250101", "20250101120000")
+  ValFunUtil.validation_granularity_input_fieldsNotNull(mockDF, "targetdb", "targetTable", mockFields, mockList, false, "20250101", "20250101120000")
+}
+
