@@ -17,16 +17,11 @@ test("validation_end_date con granularidad QUARTERLY y condición falsa") {
   when(mockWriter.insertInto(any[String])).thenReturn(())
 
   // Ejecutar
-  ValFunUtil.validation_end_date(
-    mockDF,
-    targetdb = "miBD",
-    targetTable = "miTabla",
-    field = field,
-    variables = variables,
-    type_end_date = type_end_date,
-    dateLoad = "2025-07-09",
-    timestamp = "12:00"
-  )
+  // Llamadas con los distintos tipos de validación
+  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "QUARTERLY", "2025-07-09", "12:00")
+  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "YEARLY", "2025-07-09", "12:00")
+  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "MONTHLY", "2025-07-09", "12:00")
+  ValFunUtil.validation_end_date(mockDF, "db", "table", "fecha", List("var1"), "WEEKLY", "2025-07-09", "12:00")
 
   // Verificación
   verify(mockDF).filter(any[Column])
