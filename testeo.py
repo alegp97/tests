@@ -1,66 +1,35 @@
-test("validation_period - FIRST_AND_SECOND ejecuta correctamente join y drop") {
-  // Mocks necesarios
-  val mockFilteredDF      = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockFirstTwoEndDate = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockJoinedDF        = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockDroppedDF       = mock[DataFrame](RETURNS_DEEP_STUBS)
-  val mockWriter          = mock[DataFrameWriter[Row]]
-  val mockRow             = mock[Row]
+test("validation_end_date con granularidad QUARTERLY y condición falsa") {
+  val mockDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
+  val mockFilteredDF = mock(classOf[DataFrame], RETURNS_DEEP_STUBS)
+  val mockFieldVal = mock(classOf[DataFrame])
+  val mockWriter = mock(classOf[DataFrameWriter[Row]])
 
-  // st_metrics_input.filter → devuelve filtrado
+  val variables = List("var1")
+  val field = "fecha"
+  val type_end_date = "QUARTERLY"
+
+  // Simula .filter(...) => mockFilteredDF
   when(mockDF.filter(any[Column])).thenReturn(mockFilteredDF)
-  when(mockFilteredDF.count()).thenReturn(1L) // Para entrar al if
 
-  // firstTwoEndDate = select(...).distinct().orderBy(...).limit(2)
-  when(mockFilteredDF.select(any[Column])).thenReturn(mockFirstTwoEndDate)
-  when(mockFirstTwoEndDate.distinct()).thenReturn(mockFirstTwoEndDate)
-  when(mockFirstTwoEndDate.orderBy(any[Column])).thenReturn(mockFirstTwoEndDate)
-  when(mockFirstTwoEndDate.limit(2)).thenReturn(mockFirstTwoEndDate)
-
-  // join de stMetricsInputWithGranularity.join(firstTwoEndDate, cond)
-  when(mockFilteredDF.col("end_date")).thenReturn(mock[Column])
-  when(mockFirstTwoEndDate.col("end_date")).thenReturn(mock[Column])
-  when(mockFilteredDF.join(eqTo(mockFirstTwoEndDate), any[Column])).thenReturn(mockJoinedDF)
-
-  // drop(...)
-  when(mockJoinedDF.drop(any[Column])).thenReturn(mockDroppedDF)
-
-  // Simular persistencia y escritura
-  when(mockDroppedDF.persist(any())).thenReturn(mockDroppedDF)
-  when(mockDroppedDF.where(any[Column])).thenReturn(mockDroppedDF)
-  when(mockDroppedDF.count()).thenReturn(1L)
-  when(ValFunUtil.selectPkValue(mockDroppedDF, "colX")).thenReturn(mockDroppedDF)
-
-  when(mockDroppedDF.columns).thenReturn(Array("colX"))
-  when(mockDroppedDF.write).thenReturn(mockWriter)
+  // Simula selectPkValue y writeDrilldown
+  when(ValFunUtil.selectPkValue(mockFilteredDF, field)).thenReturn(mockFieldVal)
+  when(mockFieldVal.write).thenReturn(mockWriter)
   when(mockWriter.insertInto(any[String])).thenReturn(())
 
-  // Mock fecha en head()
-  when(mockDroppedDF.head()).thenReturn(mockRow)
-  when(mockRow.getString(0)).thenReturn("2025-01-01")
-
   // Ejecutar
-  ValFunUtil.validation_period(
-    st_metrics_input = mockDF,
-    min_end_date     = mockDroppedDF,
-    max_end_date     = mockDroppedDF,
-    dateLoad         = "20250101",
-    timestamp        = "20250101120000",
-    targetdb         = "targetdb",
-    targetTable      = "targetTable",
-    fields           = List("colX"),
-    type_period      = "FIRST_AND_SECOND",
-    variables        = List("daily")
+  ValFunUtil.validation_end_date(
+    mockDF,
+    targetdb = "miBD",
+    targetTable = "miTabla",
+    field = field,
+    variables = variables,
+    type_end_date = type_end_date,
+    dateLoad = "2025-07-09",
+    timestamp = "12:00"
   )
 
-// Este where es el que se ejecuta en el bucle de validación de campos
-val mockDFToCheck = mock[DataFrame]
-when(mockDroppedDF.where(any[Column])).thenReturn(mockDFToCheck)
-when(mockDFToCheck.count()).thenReturn(1L) // hace que entre al if
-
-// Simulación de selectPkValue y escritura final
-when(ValFunUtil.selectPkValue(mockDFToCheck, "colX")).thenReturn(mockDF)
-when(mockDF.write).thenReturn(mockWriter)
-when(mockWriter.insertInto(any[String])).thenReturn(())
-
+  // Verificación
+  verify(mockDF).filter(any[Column])
+  verify(ValFunUtil).selectPkValue(mockFilteredDF, field)
+  verify(mockWriter).insertInto(contains("END_DATE_QUARTERLY"))
 }
