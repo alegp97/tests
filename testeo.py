@@ -52,4 +52,15 @@ test("validation_period - FIRST_AND_SECOND ejecuta correctamente join y drop") {
     type_period      = "FIRST_AND_SECOND",
     variables        = List("daily")
   )
+
+// Este where es el que se ejecuta en el bucle de validación de campos
+val mockDFToCheck = mock[DataFrame]
+when(mockDroppedDF.where(any[Column])).thenReturn(mockDFToCheck)
+when(mockDFToCheck.count()).thenReturn(1L) // hace que entre al if
+
+// Simulación de selectPkValue y escritura final
+when(ValFunUtil.selectPkValue(mockDFToCheck, "colX")).thenReturn(mockDF)
+when(mockDF.write).thenReturn(mockWriter)
+when(mockWriter.insertInto(any[String])).thenReturn(())
+
 }
