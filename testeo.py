@@ -19,6 +19,27 @@ test("getSourceFilter should apply filter when entities are not empty and partit
   val result = BoardDataUtil.getSourceFilter(partitionType, source, query, List(entity), sqlContext)
 
   assert(result eq filteredDfMock)
+
+  val entity1 = mock[IngestEntity]
+  val entity2 = mock[IngestEntity]
+
+  when(entity1.getDataDatePart).thenReturn("2023-01-01")
+  when(entity2.getDataDatePart).thenReturn("2023-01-02")
+
+  when(sqlContext.table("my_table")).thenReturn(dfMock)
+
+  // simulamos que el .where devuelve otro DF
+  when(dfMock.where(any[Column])).thenReturn(filteredDfMock)
+
+  val result = BoardDataUtil.getSourceFilter(
+    partitionType = "data_date_part",
+    source = "my_table",
+    query = List(col("data_date_part")),
+    entities = List(entity1, entity2),
+    sqlContext = sqlContext
+  )
+
+  assert(result eq filteredDfMock)
 }
 
 test("removeDuplicatesFromDataFrame should drop rows with duplicate partitionDateColumn") {
