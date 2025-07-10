@@ -1,22 +1,20 @@
+object BoardDataUtilWrapper {
 
-import org.apache.spark.sql.{SparkSession, SQLContext, Column}
+  val DRIVER_APP_NAME = "[SAS] BoardDataUtil"
 
-trait BoardDataUtilWrapper {
-  def spark: SparkSession
-  def columnNotIn(big: List[String], small: List[String]): List[String]
-  def columnNotInColumn(big: List[Column], small: List[Column]): List[Column]
-  def getMaxPartition(source: String, fieldToFilter: String, sqlContext: SQLContext): String
+  private var _spark: Option[SparkSession] = None
+
+  def setSpark(session: SparkSession): Unit = {
+    _spark = Some(session)
+  }
+
+  lazy val spark: SparkSession = _spark.getOrElse {
+    SparkSession.builder
+      .appName(DRIVER_APP_NAME)
+      .config("hive.exec.dynamic.partition.mode", "nonstrict")
+      .config("hive.metastore.try.direct.sql", "true")
+      .config("spark.sql.hive.convertMetastoreParquet", "false")
+      .enableHiveSupport()
+      .getOrCreate()
+  }
 }
-
-
-object ProdBoardDataUtilWrapper extends BoardDataUtilWrapper {
-
-  val log = LogManager.getLogger(getClass.getName)
-
-  override lazy val spark: SparkSession = SparkSession.builder
-    .appName("[SAS] BoardDataUtil")
-    .config("hive.exec.dynamic.partition.mode", "nonstrict")
-    .config("hive.metastore.try.direct.sql", "true")
-    .config("spark.sql.hive.convertMetastoreParquet", "false")
-    .enableHiveSupport()
-    .getOrCreate()
