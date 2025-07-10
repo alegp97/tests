@@ -11,14 +11,17 @@ import org.apache.spark.storage.StorageLevel
 
 
 
+// 2️⃣  que engine.where(...) devuelva ese DataFrame
+when(engine.where(ArgumentMatchers.any[Column])).thenReturn(idLogitDF)
 
+// 3️⃣  encadenar select y distinct para que sigan devolviendo el mismo DF
+when(idLogitDF.select(ArgumentMatchers.any[Column])).thenReturn(idLogitDF)
+when(idLogitDF.distinct()).thenReturn(idLogitDF)
+
+// 4️⃣  y finalmente que .collect() devuelva filas válidas
+import org.apache.spark.sql.RowFactory
 val rows = Array(RowFactory.create("dummy_id1"), RowFactory.create("dummy_id2"))
-
-when(idLogit.collect()).thenReturn(rows)   // Para versión “collect → map”
-when(idLogit.map(ArgumentMatchers.any()))  // Para versión “map → collect”
-  .thenReturn(idLogit)                     // encadenado
-when(idLogit.collect()).thenReturn(rows)
-
+when(idLogitDF.collect()).thenReturn(rows)
 
 
 
