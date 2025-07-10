@@ -7,7 +7,40 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 
+ def stubDataFrame(
+      cols: Array[String] = Array("id"),
+      rows: Array[Row] = Array(Row("dummy")),
+      mappedRows: Array[String] = Array("dummy")
+  ): DataFrame = {
+    val df = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
 
+    // mocks de métodos encadenables
+    when(df.where(AM.any[Column])).thenReturn(df)
+    when(df.select(AM.any[Seq[Column]])).thenReturn(df)
+    when(df.select(AM.any[Column])).thenReturn(df)
+    when(df.distinct()).thenReturn(df)
+    when(df.join(AM.any[DataFrame], AM.any[Column])).thenReturn(df)
+    when(df.join(AM.any[DataFrame], AM.any[Column], AM.any[String])).thenReturn(df)
+    when(df.persist(AM.any[StorageLevel])).thenReturn(df)
+    when(df.unpersist()).thenReturn(df)
+
+    // columnas y collect()
+    when(df.columns).thenReturn(cols)
+    when(df.collect()).thenReturn(rows)
+
+    // mock del Dataset resultado de map(...)
+    val ds = mock[Dataset[String]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+    when(ds.collect()).thenReturn(mappedRows)
+
+    when(
+      df.map(
+        AM.any[Row => String](),
+        AM.any[Encoder[String]]()
+      )
+    ).thenReturn(ds)
+
+    df
+  }
 
 
 
