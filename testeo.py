@@ -55,4 +55,38 @@ class CalculateDFModelsCreditTest extends AnyFunSuite with MockitoSugar {
     // ─── Assert: la función devolvió el último DF mock que indicamos ────────────
     assert(result eq expectedResult)
   }
+
+
+  test("calculateDFModels – scope distinto de CREDIT") {
+
+    val sqlContext = mock[SQLContext](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+
+    val engModel       = mock[DataFrame](RETURNS_DEEP_STUBS)
+    val modelVersions  = mock[DataFrame](RETURNS_DEEP_STUBS)
+    val engine         = mock[DataFrame](RETURNS_DEEP_STUBS)  // usará tabla sae_engine pero sin filtros CREDIT
+    val joinComum      = mock[DataFrame](RETURNS_DEEP_STUBS)
+    val expectedResult = mock[DataFrame](RETURNS_DEEP_STUBS)
+
+    // Tablas base
+    when(sqlContext.table(AM.eq("sourcedb.sae_eng_model"))).thenReturn(engModel)
+    when(sqlContext.table(AM.eq("sourcedb.sae_model_versions"))).thenReturn(modelVersions)
+    when(sqlContext.table(AM.eq("sourcedb.sae_model"))).thenReturn(engModel)
+    when(sqlContext.table(AM.eq("sourcedb.sae_engine"))).thenReturn(engine)
+
+    // Joins / persist
+    when(engModel.join(AM.any[DataFrame], AM.any[Column])).thenReturn(joinComum)
+    when(joinComum.persist(AM.any[StorageLevel])).thenReturn(joinComum)
+    when(joinComum.unpersist()).thenReturn(joinComum)
+
+    // .where(isIn(...)) para else-branch
+    when(joinComum.where(AM.any[Column])).thenReturn(joinComum)
+
+    // select final con lit(null) (ramas else)
+    when(joinComum.select(AM.any[Seq[Column]])).thenReturn(expectedResult)
+
+    // Ejecutar con scope K.FIXED (o el que uses para else)
+    val result = BoardDataUtil.calculateDFModels("sourcedb", K.FIXED, sqlContext)
+
+    assert(result eq expectedResult)
+  }
 }
