@@ -6,6 +6,23 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
+
+
+
+
+
+
+val rows = Array(RowFactory.create("dummy_id1"), RowFactory.create("dummy_id2"))
+
+when(idLogit.collect()).thenReturn(rows)   // Para versión “collect → map”
+when(idLogit.map(ArgumentMatchers.any()))  // Para versión “map → collect”
+  .thenReturn(idLogit)                     // encadenado
+when(idLogit.collect()).thenReturn(rows)
+
+
+
+
+
 class CalculateDFModelsCreditTest extends AnyFunSuite with MockitoSugar {
 
   test("calculateDFModels – scope CREDIT") {
