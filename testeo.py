@@ -1,11 +1,12 @@
-when(idLogitDF.select(any[Column])).thenReturn(idLogitDF)
-when(idLogitDF.distinct()).thenReturn(idLogitDF)
+// ── (2)  Crea un Dataset[String] mock para después del map ───────────
+val dsString = mock[Dataset[String]](
+  withSettings().defaultAnswer(org.mockito.Answers.RETURNS_DEEP_STUBS)
+)
+// Cuando se llame collect() sobre él → devuelve tu array real
+when(dsString.collect()).thenReturn(Array("dummy_id1", "dummy_id2"))
 
-// 3️⃣  Stub directo hasta collect()
-import org.apache.spark.sql.{Encoder, Encoders, Row}
+// ── (3)  map(...)(encoder)   →   dsString  ───────────────────────────
 when(
   idLogitDF
-    .map(any[Function1[Row,String]]())          // 1ª lista de parámetros
-    (any[Encoder[String]]())                    // 2ª (implícitos)
-    .collect()
-).thenReturn(Array("dummy_id1","dummy_id2"))
+    .map(any[Row => String]())(any[Encoder[String]]())
+).
