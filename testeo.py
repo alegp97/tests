@@ -1,14 +1,7 @@
-when(idLogitDF.select(any[Column])).thenReturn(idLogitDF)   // si en tu código hay .select(...)
-when(idLogitDF.distinct()).thenReturn(idLogitDF)            // si hay .distinct()
-
-// ────────── 4.  Dataset[String] que saldrá del map ─────────────────────────
-val dsString = mock[Dataset[String]]()                       // tampoco deep-stubs
+val dsString = mock[Dataset[String]](withSettings().defaultAnswer(org.mockito.Answers.RETURNS_DEEP_STUBS))
 when(dsString.collect()).thenReturn(Array("dummy_id1","dummy_id2"))
 
-// ────────── 5.  map(Java)  →  dsString ─────────────────────────────────────
+// 2. map (…)  →  dsString   (elige la sobrecarga correcta)
 when(
-  idLogitDF.map(
-    any[MapFunction[Row,String]](),      // λ  r => r(0).toString
-    any[Encoder[String]]()               // Encoders.STRING
-  )
+  idLogitDF.map(any[MapFunction[Row,String]](), any[Encoder[String]]())
 ).thenReturn(dsString)
