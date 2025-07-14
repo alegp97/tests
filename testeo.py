@@ -1,12 +1,8 @@
-// ── (2)  Crea un Dataset[String] mock para después del map ───────────
-val dsString = mock[Dataset[String]](
-  withSettings().defaultAnswer(org.mockito.Answers.RETURNS_DEEP_STUBS)
-)
-// Cuando se llame collect() sobre él → devuelve tu array real
-when(dsString.collect()).thenReturn(Array("dummy_id1", "dummy_id2"))
+// 4. Mock para MAP
+val stringDsMock = mock[Dataset[String]]
+val encoder = Encoders.STRING
+when(selectedMock.map(any[MapFunction[Row, String]])(any[Encoder[String]]()))
+  .thenReturn(stringDsMock)
 
-// ── (3)  map(...)(encoder)   →   dsString  ───────────────────────────
-when(
-  idLogitDF
-    .map(any[Row => String]())(any[Encoder[String]]())
-).
+// 5. Mock para COLLECT
+when(stringDsMock.collect()).thenReturn(Array("id_001", "id_002"))
