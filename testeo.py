@@ -1,7 +1,10 @@
-val dsString = mock[Dataset[String]](withSettings().defaultAnswer(org.mockito.Answers.RETURNS_DEEP_STUBS))
-when(dsString.collect()).thenReturn(Array("dummy_id1","dummy_id2"))
-
-// 2. map (…)  →  dsString   (elige la sobrecarga correcta)
 when(
-  idLogitDF.map(any[MapFunction[Row,String]](), any[Encoder[String]]())
+  idLogitDF.map(
+    any[Function1[Row, String]]()      // la lambda Scala
+  )(                                     // paréntesis del parámetro implícito
+    any[Encoder[String]]()              // el encoder implícito
+  )
 ).thenReturn(dsString)
+
+// 3. Stub de collect() sobre ese mismo Dataset[String]
+when(dsString.collect()).thenReturn(Array("dummy_id1", "dummy_id2"))
