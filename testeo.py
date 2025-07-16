@@ -1,9 +1,11 @@
-val engine = mock[DataFrame]
-val engineWhere = mock[DataFrame]
-val engineSelect = mock[DataFrame]
-val engineDistinct = mock[DataFrame]
+val idFixed = mock[Dataset[Row]]
+val mappedDataset = mock[Dataset[String]]
 
-when(sqlContext.table(s"$sourcedb.sae_engine")).thenReturn(engine)
-when(engine.where(any[Column])).thenReturn(engineWhere)
-when(engineWhere.select(any[Column])).thenReturn(engineSelect)
-when(engineSelect.distinct()).thenReturn(engineDistinct)
+// stub para .map(...)
+when(idFixed.map(
+  mockAny[Function1[Row, String]](),
+  mockAny[Encoder[String]]()
+)).thenReturn(mappedDataset)
+
+// stub para .collect()
+when(mappedDataset.collect()).thenReturn(Array("dummy_id1", "dummy_id2"))
