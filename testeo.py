@@ -1,46 +1,39 @@
-test("should parse all arguments including optional fields") {
-  val args = Array(
-    "-v", "val_db",
-    "-s", "src_db",
-    "-d", "stg_db",
-    "-p", "/some/path",
-    "-l", "20250717",
-    "-x", "202507171200",
-    "-n", "8080",
-    "-h", "localhost",
-    "-u", "http://hue.url",
-    "-r", "admin",
-    "-w", "secret",
-    "-f", "/tmp/email_info.json",
-    "-b", "processA",
-    "-t", "target_tbl",
-    "-o", "source_tbl",
-    "-z", "/logs/full/path/",
-    "-e", "dev",
-    "-g", "Sheet1"
-  )
+import org.scalatest.funsuite.AnyFunSuite
+import com.santander.stresstest.config.{HouseKeepingParser, HouseKeepingArgs}
 
-  val result = NotificationParser.parse(args, NotificationArgs())
+class HouseKeepingParserTest extends AnyFunSuite {
 
-  assert(result.isDefined)
-  val config = result.get
+  test("should parse required and optional arguments") {
+    val args = Array(
+      "-d", "my_db",
+      "-t", "my_table",
+      "-m", "4"
+    )
 
-  assert(config.validationdb == "val_db")
-  assert(config.sourcedb == "src_db")
-  assert(config.stagingdb == "stg_db")
-  assert(config.path == "/some/path")
-  assert(config.data_date_part == "20250717")
-  assert(config.data_timestamp_part == "202507171200")
-  assert(config.port == "8080")
-  assert(config.host == "localhost")
-  assert(config.hue_url == "http://hue.url")
-  assert(config.user == "admin")
-  assert(config.password == "secret")
-  assert(config.file == "/tmp/email_info.json")
-  assert(config.process == "processA")
-  assert(config.targetTable == "target_tbl")
-  assert(config.sourceTable == "source_tbl")
-  assert(config.log_path == "/logs/full/path/")
-  assert(config.env == "dev")
-  assert(config.notificationSheetName == "Sheet1")
+    val result = HouseKeepingParser.parse(args, HouseKeepingArgs())
+
+    assert(result.isDefined)
+    val config = result.get
+    assert(config.database == "my_db")
+    assert(config.table == "my_table")
+    assert(config.maxPartitions == 4)
+  }
+
+  test("should parse only required argument and use defaults for optional") {
+    val args = Array("-d", "default_db")
+
+    val result = HouseKeepingParser.parse(args, HouseKeepingArgs())
+
+    assert(result.isDefined)
+    val config = result.get
+    assert(config.database == "default_db")
+    assert(config.table.isEmpty)
+    assert(config.maxPartitions == 1)
+  }
+
+  test("should fail if required argument is missing") {
+    val args = Array("-t", "table_only")
+    val result = HouseKeepingParser.parse(args, HouseKeepingArgs())
+    assert(result.isEmpty)
+  }
 }
