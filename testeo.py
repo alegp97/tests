@@ -1,18 +1,23 @@
-  // Simulamos la parte de map(...).toList sobre Dataset
-  import org.apache.spark.sql.RowFactory
-  val nameRow = RowFactory.create("my_Name")
-  when(camposOriginals.collect()).thenReturn(Array(nameRow))
+// Mock principal
+val j0 = mock[DataFrame](withSettings().defaultAnswer(RETURNS_DEEP_STUBS))
 
-  // camposFijos: necesarios si se usan en .map { x => col(...) ... }
-  when(camposFijos.select(any[Seq[Column]])).thenReturn(camposFijos)
-  when(camposFijos.distinct()).thenReturn(camposFijos)
-  val campoFijo1 = RowFactory.create("col_abc")
-  val campoFijo2 = RowFactory.create("col_def")
-  when(camposFijos.collect()).thenReturn(Array(campoFijo1, campoFijo2))
+// Stub para el join inicial
+when(lastScenarioDataTable.join(any[DataFrame], any[Column], any[String])).thenReturn(j0)
 
+// Stub de columnas para el map que hace: j0.columns.map(x => col("`" + x + "`"))
+when(j0.columns).thenReturn(Array("dummy_col1", "dummy_col2"))
 
-// --- Mock del join que devuelve j0 ---
-  val j0DF = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
-  when(lastScenarioDataTable.join(any[Dataset[Row]])).thenReturn(j0DF)
-  when(j0DF.columns).thenReturn(Array("dummy_col1", "dummy_col2"))
-  when(j0DF.select(any[Seq[Column]])).thenReturn(j0DF)
+// Stub de select con columnas
+when(j0.select(any[Seq[Column]]: _*)).thenReturn(j0)
+
+// Stub de col()
+when(j0.col(any[String])).thenReturn(mock[Column])
+
+// Stub de drop().drop().drop() en cadena
+when(j0.drop(any[Column]())).thenReturn(j0)
+
+// Stub de join posteriores (j1.join(j2...))
+when(j0.join(any[DataFrame], any[Column], any[String])).thenReturn(j0)
+
+// Stub de distinct final
+when(j0.distinct()).thenReturn(j0)
