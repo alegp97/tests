@@ -12,3 +12,10 @@ val rowGroup = Array(row1, row2)
 
 
 when(camposOriginals.collect()).thenReturn(rowGroup)
+
+
+
+import java.math.BigDecimal as JBigDecimal
+
+when(row1.getAs[JBigDecimal]("scenario_type")).thenReturn(new JBigDecimal("1"))
+when(row2.getAs[JBigDecimal]("scenario_type")).thenReturn(new JBigDecimal("2"))
