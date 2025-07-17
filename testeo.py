@@ -9,3 +9,10 @@
   val campoFijo1 = RowFactory.create("col_abc")
   val campoFijo2 = RowFactory.create("col_def")
   when(camposFijos.collect()).thenReturn(Array(campoFijo1, campoFijo2))
+
+
+// --- Mock del join que devuelve j0 ---
+  val j0DF = mock[Dataset[Row]](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+  when(lastScenarioDataTable.join(any[Dataset[Row]])).thenReturn(j0DF)
+  when(j0DF.columns).thenReturn(Array("dummy_col1", "dummy_col2"))
+  when(j0DF.select(any[Seq[Column]])).thenReturn(j0DF)
