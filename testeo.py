@@ -1,15 +1,14 @@
-// Mock raíz del DataFrame que devuelve sql()
-val camposOriginals = mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_DEEP_STUBS))
+val row1 = mock[Row]
+when(row1.getAs[BigDecimal]("scenario_type")).thenReturn(BigDecimal(1))
+when(row1.getAs[String]("column_name")).thenReturn("col_abc")
+when(row1.getAs[String]("name")).thenReturn("my_Name")
 
-// Simulación del resultado de sqlContext.sql(...)
-when(sqlContext.sql(ArgumentMatchers.startsWith("select a.name"))).thenReturn(camposOriginals)
+val row2 = mock[Row]
+when(row2.getAs[BigDecimal]("scenario_type")).thenReturn(BigDecimal(2))
+when(row2.getAs[String]("column_name")).thenReturn("col_def")
+when(row2.getAs[String]("name")).thenReturn("my_Name") // mismo nombre para agrupar
 
-// Mockeo de toda la cadena: .distinct().collect()
-val rowMock = mock[Row]
-when(rowMock.getAs[String]("name")).thenReturn("campo_1")
+val rowGroup = Array(row1, row2)
 
-// Puedes añadir más si quieres varias filas:
-val rows = Array(rowMock)
 
-when(camposOriginals.distinct()).thenReturn(camposOriginals)
-when(camposOriginals.collect()).thenReturn(rows)
+when(camposOriginals.collect()).thenReturn(rowGroup)
