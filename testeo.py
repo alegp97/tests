@@ -125,3 +125,13 @@ test("Debe ejecutar processAndSendNotificationEmail con datos simulados") {
 
   assert(true)
 }
+
+
+
+when(mailConfig.getFrom()).thenReturn("from@x.com")
+when(mailConfig.getTo()).thenReturn(Collections.singletonList("to@x.com"))
+when(mailConfig.getCc()).thenReturn(Collections.singletonList("cc@x.com"))
+when(mailConfig.getBc()).thenReturn(Collections.singletonList("bcc@x.com"))
+when(mailConfig.getSubject()).thenReturn("SUBJ")
+when(mailConfig.getBody()).thenReturn("BODY")
+when(mailConfig.getTemplate()).thenReturn("TPL")
