@@ -135,3 +135,16 @@ when(mailConfig.getBc()).thenReturn(Collections.singletonList("bcc@x.com"))
 when(mailConfig.getSubject()).thenReturn("SUBJ")
 when(mailConfig.getBody()).thenReturn("BODY")
 when(mailConfig.getTemplate()).thenReturn("TPL")
+
+
+staticSender.when(() =>
+  com.santander.supra.core3.staging.mail.AzureEmailSender.sendEmail(
+    anyString(),
+    anyString(),
+    any[Array[String]](),
+    any[Array[String]](),
+    any[Array[String]](),
+    any[Array[String]]()
+  )
+).thenAnswer(_ => null)
+
