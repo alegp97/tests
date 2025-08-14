@@ -148,3 +148,40 @@ staticSender.when(() =>
   )
 ).thenAnswer(_ => null)
 
+
+
+val staticNotif = org.mockito.Mockito.mockStatic(classOf[NotificationUtil])
+staticNotif.when(() =>
+  NotificationUtil.replaceStringWithInfoNotification(anyString(), any())
+).thenReturn("BODY-REPLACED")
+
+// 2) Replica EXACTAMENTE el array 'tomails' del código:
+val expectedTo: Array[String] = Array(
+  "nerea.ruiz@serexternos.gruposantander.com",
+  "daniel.castillo@gruposantander.com",
+  "luis.lopez@serexternos.gruposantander.com",
+  "juan.martin@serexternos.gruposantander.com",
+  "alejandro.garcia@serexternos.gruposantander.com",
+  "zhanna.shybitsa@serexternos.gruposantander.com",
+  "pedro.ruiz@serexternos.gruposantander.com",
+  "agustin.manzano@serexternos.gruposantander.com",
+  "maria.chinchillalroman@serexternos.gruposantander.com",
+  "scenariosrepository.soportesupra@gruposantander.com",
+  "diego.sernanfernandez@serexternos.gruposantander.com"
+)
+
+// 3) Mock estático SIN matchers: usa valores literales exactamente como se llamarán
+val staticSender =
+  org.mockito.Mockito.mockStatic(classOf[com.santander.supra.core3.staging.mail.AzureEmailSender])
+
+staticSender.when(() =>
+  com.santander.supra.core3.staging.mail.AzureEmailSender.sendEmail(
+    "FINAL-SUBJECT",
+    "BODY-REPLACED",
+    expectedTo,
+    Array.empty[String],
+    Array.empty[String],
+    Array.empty[String]
+  )
+).thenAnswer(_ => null)
+
