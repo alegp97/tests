@@ -1,162 +1,118 @@
-// ---------- Spark ----------
-      val sparkMock      = mock[SparkSession]
-      val sqlContextMock = mock[SQLContext]
-      when(sparkMock.sqlContext).thenReturn(sqlContextMock)
+def getDfRestoVariables: DataFrame = {
 
-      def dfSelf(): DataFrame =
-        mock[DataFrame](withSettings().defaultAnswer(Answers.RETURNS_SELF))
+  // Sonarqube fixed cognitive complexity: condiciones agrupadas en listas y plegadas con reduceOption/foldRight para evitar cadenas largas de || y when/otherwise
 
-      val versionDf = dfSelf()
-      val histDf    = dfSelf()
-      val joinedDf  = dfSelf()
-      val allDf     = dfSelf()
-      val toWriteDf = dfSelf()
+  val name    = col("variable_name")
+  val country = col("country")
 
-      when(sqlContextMock.table("validation_db.version_notification")).thenReturn(versionDf)
-      when(sqlContextMock.table("common_db.historical_data")).thenReturn(histDf)
+  val like: String => Column = pat => name.like(pat)
+  val orAll: Seq[Column] => Column = _.reduceOption(_ || _).getOrElse(lit(false))
+  val chainWhen: (Seq[(Column, Column)], Column) => Column =
+    (pairs, defaultV) => pairs.foldRight(defaultV){ case ((c,v), acc) => when(c, v).otherwise(acc) }
 
-      when(versionDf.where(any[Column]())).thenReturn(versionDf)
-      when(versionDf.cache()).thenReturn(versionDf)
-      when(versionDf.alias(anyString())).thenReturn(versionDf)
-
-      when(histDf.distinct()).thenReturn(histDf)
-      when(histDf.alias(anyString())).thenReturn(histDf)
-
-      when(versionDf.join(any[Dataset[Row]](), any[Column]())).thenReturn(joinedDf)
-      when(joinedDf.drop(any[Column]())).thenReturn(joinedDf)
-      when(joinedDf.distinct()).thenReturn(joinedDf)
-
-      // ---------- Row con schema para entrar en el IF ----------
-      val schema = StructType(Seq(
-        StructField("unit_id",              StringType),
-        StructField("entity_id",            StringType),
-        StructField("exercise",             StringType),
-        StructField("file_version",         StringType),
-        StructField("file_name",            StringType),
-        StructField("modification_date",    StringType),
-        StructField("country",              StringType),
-        StructField("modification_type",    StringType),
-        StructField("modification_details", StringType),
-        StructField("name",                 StringType),
-        StructField("detailsmod",           StringType)
-      ))
-      val rowOk = new GenericRowWithSchema(Array[Any](
-        "U1","E1","EX1","v1","HISTORICAL_DATA_001.csv","2025-01-01","ES","MT","DET","NOMBRE","DMOD"
-      ), schema)
-      when(joinedDf.collect()).thenReturn(Array(rowOk))
-
-      // ---------- Dentro de processAndSendNotificationEmail ----------
-
-      // A) getHd* → columnas y groupBy/pivot/agg (todo devolviendo mocks seguros)
-      when(histDf.columns).thenReturn(Array(
-        "Country","Name","Description","Detail","Transformation","Adjustment",
-        "Source","Original_Source","Code","Condition","ejeY","value",
-        "unit_id","entity_id","dataTimestampPart","timeline","year"
-      ))
-      val rgd = mock[RelationalGroupedDataset](withSettings().defaultAnswer(Answers.RETURNS_SELF))
-      doReturn(rgd).when(histDf).groupBy(anyArg[Seq[Column]](): _*)
-      when(rgd.pivot(anyString())).thenReturn(rgd)
-      when(rgd.agg(any[Column]())).thenReturn(histDf)
-
-      // Unión anual + quarterly → allDf
-      when(histDf.join(any[Dataset[Row]](), any[Column]())).thenReturn(allDf)
-      when(allDf.alias(anyString())).thenReturn(allDf)
-      when(allDf.drop(any[Column]())).thenReturn(allDf)
-      when(allDf.distinct()).thenReturn(allDf)
-      when(allDf.col(anyString())).thenReturn(lit(1))
-      when(allDf.where(any[Column]())).thenReturn(allDf)
-      doReturn(allDf).when(allDf).orderBy(anyArg[Seq[Column]](): _*)
-      doReturn(toWriteDf).when(allDf).select(anyArg[Seq[Column]](): _*)
-
-      // B) writer del CSV temporal
-      val writer = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_SELF))
-      when(toWriteDf.coalesce(1)).thenReturn(toWriteDf)
-      when(toWriteDf.write).thenReturn(writer)
-      when(writer.format(anyString())).thenReturn(writer)
-      when(writer.option(anyString(), anyString())).thenReturn(writer)
-      when(writer.mode(any[SaveMode]())).thenReturn(writer)
-      doNothing().when(writer).save(anyString())
-
-      // C) FileSystem/HDFS
-      val fsMock = mock[FileSystem]
-      val staticFs: MockedStatic[HDFSHandler] =
-        org.mockito.Mockito.mockStatic(classOf[HDFSHandler])
-      staticFs.when(() => HDFSHandler.getFileSystem(anyString())).thenReturn(fsMock)
-
-      when(fsMock.exists(any[Path])).thenReturn(false)
-      when(fsMock.mkdirs(any[Path])).thenReturn(true)
-      when(fsMock.delete(any[Path], anyBoolean())).thenReturn(true)
-      when(fsMock.rename(any[Path], any[Path])).thenReturn(true)
-      doNothing().when(fsMock).setPermission(any[Path], any[FsPermission])
-
-      val status = mock[FileStatus]
-      when(status.getPath).thenReturn(new Path("/tmp/part-00000.csv"))
-      when(fsMock.globStatus(argThat[Path](_.toString.endsWith("/part*"))))
-        .thenReturn(Array(status))
-
-      // D) usuarios / recipients (la existencia de tabla la resuelve tu stub de HiveUtilWrapper)
-      val userEmailsDf = dfSelf()
-      when(sqlContextMock.table("staging_db.users_eresresearch")).thenReturn(userEmailsDf)
-      when(userEmailsDf.where(any[Column]())).thenReturn(userEmailsDf)
-      when(userEmailsDf.select(any[Column](), any[Column](), any[Column](), any[Column]()))
-        .thenReturn(userEmailsDf)
-      when(userEmailsDf.select(any[Column]())).thenReturn(userEmailsDf)
-      when(userEmailsDf.distinct()).thenReturn(userEmailsDf)
-      val ueSchema = StructType(Seq(StructField("user_email", StringType)))
-      val ueRow = new GenericRowWithSchema(Array[Any]("user@test.com"), ueSchema)
-      when(userEmailsDf.collect()).thenReturn(Array(ueRow))
-
-      // E) Insert en notification_sent sobre versionDf
-      val writer2 = mock[DataFrameWriter[Row]](withSettings().defaultAnswer(Answers.RETURNS_SELF))
-      when(versionDf.repartition(1)).thenReturn(versionDf)
-      when(versionDf.write).thenReturn(writer2)
-      when(writer2.mode(any[SaveMode]())).thenReturn(writer2)
-      doNothing().when(writer2).insertInto(anyString())
-
-      // (Opcional) Email en estático: si no tienes la clase, usa stub test-only y elimina este bloque
-      val emailStatic = org.mockito.Mockito.mockStatic(classOf[com.santander.supra.core3.staging.mail.AzureEmailSender])
-      emailStatic.when(() =>
-        com.santander.supra.core3.staging.mail.AzureEmailSender.sendEmail(
-          anyString(), anyString(), any(classOf[Array[String]]), any(), any(), any(classOf[Array[String]])
-        )
-      ).thenAnswer(_ => ())
-
-      // ---------- Parámetros ----------
-      val mailServer = mock[MailServerConfig]
-      when(mailServer.getFrom()).thenReturn("from@test.com")
-      when(mailServer.getTo()).thenReturn(Array("to@test.com"))
-      when(mailServer.getCc()).thenReturn(Array("cc@test.com"))
-      when(mailServer.getBc()).thenReturn(Array("bcc@test.com"))
-      when(mailServer.getSubject()).thenReturn("Asunto")
-      when(mailServer.getBody()).thenReturn("Cuerpo")
-
-      val params = ParametersTransposeAndNotificationHD(
-        common_db          = "common_db",
-        validation_db      = "validation_db",
-        staging_db         = "staging_db",
-        message            = mailServer,                 // el componente lee message de parámetros
-        sql_wharehouse_url = "jdbc:dummy",
-        path               = "/exports/Historical_data_U1_E1.xlsx",
-        environment        = "DEV"
-      )
-
-      // ---------- Ejecutar ----------
-      implicit val spark: SparkSession = sparkMock
-      TransposeAndNotificationHD.run(
-        data_date_part         = "20250101",
-        data_timestamp_part    = "20250301123456",
-        mailServer             = mailServer,
-        last_timestamp_version = "20250301123456",
-        parametros             = params
-      )
-
-      // ---------- Verificaciones mínimas ----------
-      org.mockito.Mockito.verify(writer2, org.mockito.Mockito.times(1))
-        .insertInto(eqTo("validation_db.notification_sent"))
-      org.mockito.Mockito.verify(emailStatic, org.mockito.Mockito.times(1))
-
-      // ---------- Cierre estáticos ----------
-      staticFs.close()
-      emailStatic.close()
-    }
+  val timelineCond = {
+    val parts = Seq(
+      if (getYearCondition)   Some(col("timeline").like("%Q%")) else None,
+      if (getAnnualCondition) Some(col("timeline") === "A")     else None
+    ).flatten
+    parts.reduceOption(_ || _).getOrElse(lit(true))
   }
+
+  val interbankUSCAN =
+    Seq(interbank_daily, interbank_weekly, interbank_monthly)
+      .map(name.like)
+      .map(_ && country.isin("US","CAN"))
+      .reduce(_ || _)
+
+  val variableAny = {
+    val simples = Seq(
+      "%GDP (% YOY)%", "%UNEMPLOYMENT (% ACTIVE POPULATION)%", "%CPI (% YOY)%",
+      "%REAL ESTATE: HOUSING PRIC% (% YOY)%", "%REAL ESTATE: LAND PRIC% (% YOY)%",
+      "%OFFICIALS%", "%KOS0R%",
+      "%SOVEREIGN BONDS 2 YEARS%", "%SOVEREIGN BONDS 3 YEARS%",
+      "%SOVEREIGN BONDS 5 YEARS%", "%SOVEREIGN BONDS 10 YEARS%",
+      "%SOVEREIGN BOND SPREAD VS GERMANY (10Y, BP)%",
+      "%SOVEREIGN BOND SPREAD VS USA (10Y, BP)%",
+      "% EUR (END OF PERIOD)%", "%/ EUR (AVERAGE OF PERIOD)%"
+    ).map(like) ++ Seq(
+      name.like(inflation_uf),
+      name.like(inflation_bonds),
+      name.like(inflation_linked_bonds),
+      name.like(inflation_linked_2),
+      name.like(inflation_linked_5),
+      name.like(inflation_linked_10),
+      name.like(inflation_linked_20)
+    )
+    orAll(simples :+ interbankUSCAN)
+  }
+
+  val baseFilter =
+    col("unit_id")          === unit_id         &&
+    col("entity_id")        === entity_id       &&
+    col("exercise")         === exercise        &&
+    col("scenario_name")    === scenario_name   &&
+    col("scenario_version") === scenario_version &&
+    timelineCond && variableAny
+
+  val restoVariables =
+    SQLContext.table(s"$common_db.scenarios")
+      .where(baseFilter)
+      .select(
+        chainWhen(
+          Seq(
+            (name.like(inflation_uf),                               lit("I. FINANCIAL MARKETS SCENARIO")),
+            ((name.like(inflation_bonds) || name.like(inflation_linked_bonds)),
+              lit("II. FINANCIAL MARKETS SCENARIO"))
+          ),
+          col("category")
+        ).as("category"),
+
+        chainWhen(
+          Seq(
+            (like("%GDP (% YOY)%"),                               lit(1)),
+            (like("%UNEMPLOYMENT (% ACTIVE POPULATION)%"),        lit(2)),
+            (like("%CPI (% YOY)%"),                                lit(3)),
+            (like("%REAL ESTATE: HOUSING PRIC% (% YOY)%"),        lit(4)),
+            (like("%REAL ESTATE: LAND PRIC% (% YOY)%"),           lit(5)),
+            (like("%OFFICIALS%"),                                  lit(6)),
+            (name.like(interbank_daily) || name.like(interbank_weekly) || name.like(interbank_monthly),
+              when(country === "URU", lit(6)).otherwise(col("interbank_rates_abs"))),
+            (name.like(inflation_bonds) || name.like(inflation_uf), lit(7)),
+            (like("%KOS0R%"),                                      lit(8)),
+            (like("%SOVEREIGN BONDS 2 YEARS%"),                    lit(9)),
+            (like("%SOVEREIGN BONDS 3 YEARS%"),                    lit(10)),
+            (like("%SOVEREIGN BONDS 5 YEARS%"),                    lit(11)),
+            (like("%SOVEREIGN BONDS 10 YEARS%"),                   lit(12)),
+            (like("%SOVEREIGN BOND SPREAD VS GERMANY (10Y, BP)%"), lit(13)),
+            (like("%SOVEREIGN BOND SPREAD VS USA (10Y, BP)%"),     lit(14)),
+            (like("% EUR (END OF PERIOD)%"),                       lit(24)),
+            (like("%/ EUR (% OF PERIOD)%"),                        split(name, "\\W")(0))
+          ),
+          lit(1000)
+        ).as("ordervariable"),
+
+        chainWhen(
+          Seq(
+            (
+              name.like(interbank_daily) || name.like(interbank_weekly) || name.like(interbank_monthly),
+              concat(
+                when(country === "UK",  lit("LIBOR"))
+                  .when(country === "EMU", lit("EURIBOR"))
+                  .otherwise(country),
+                concat(lit(" "), regexp_replace(name, "1W", "1D"))
+              )
+            ),
+            (name.like(inflation_uf), name),
+            ((name.like(inflation_bonds) || name.like(inflation_linked_bonds)), name)
+          ),
+          country
+        ).as("c2"),
+
+        when(col("timeline").like("%Q%"),
+             concat(col("year"), col("timeline")))
+          .otherwise(col("year")).as("ejev"),
+        col("value")
+      )
+
+  restoVariables
+}
