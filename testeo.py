@@ -1,3 +1,9 @@
+La nueva versión reduce la complejidad moviendo decisiones repetidas a helpers locales, usando guard clauses y Option en lugar de null, y unificando ramas equivalentes (elección de data_timestamp_part/data_date_part, construcción del select, alineación de esquema y aplicación de filtros por entidades). Se evita anidamiento y duplicación de .where/.select, se conserva la generación de queryCols a partir de fields_dict, el cálculo opcional de original_value para el caso AUDIT, la aplicación de extra_filter, las reglas de negocio (MKT_ET_DATA_ST y EDITED_INPUT→DATA_INPUT con left_anti), la obtención de particiones Hive y la misma ruta de escritura condicionada a count()>0. Lógicamente es equivalente: las condiciones y claves de join, columnas seleccionadas y orden final coinciden con la original, por lo que el comportamiento esperado se mantiene; el cambio es estructural (legibilidad y mantenibilidad) sin alterar la semántica.
+
+
+
+
+
 package com.santander.puntospartida
 
 import org.apache.spark.sql.{Column, Row, SaveMode, SparkSession}
