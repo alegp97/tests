@@ -1,32 +1,63 @@
-private void executeQuery(String queryId, List<Object> params) throws SQLException {
-    // Whitelist de consultas permitidas
-    Map<String, String> queries = Map.of(
-        "INSERT_EXEC", "INSERT INTO exec_log (user_id, started_at) VALUES (?, ?)",
-        "UPDATE_STATE", "UPDATE exec_log SET state=? WHERE id=?",
-        "SELECT_LAST", "SELECT id, state FROM exec_log WHERE user_id=? ORDER BY started_at DESC LIMIT 1"
-    );
+@SuppressWarnings("SqlSourceToSinkFlow") // Justificado: validación estricta + parámetros
+private Object executeSqlSingle(
+        Connection connection,
+        String sql,
+        List<Object> params,
+        boolean allowWrite,
+        int maxRows
+) throws SQLException {
 
-    String sql = queries.get(queryId);
-    if (sql == null) {
-        throw new SQLException("Query no permitida");
-    }
+    if (connection == null) throw new SQLException("Connection is null");
+    if (sql == null || sql.isBlank()) throw new SQLException("Empty SQL");
 
-    try (PreparedStatement ps = connection.prepareStatement(sql)) {
-        // Bind de parámetros dinámicos
+    final String trimmed = sql.trim();
+    final String U = trimmed.toUpperCase(java.util.Locale.ROOT);
+
+    // 1) Bloquear patrones peligrosos (sin whitelist de consultas, pero con “gates”)
+    if (U.contains(";")) throw new SQLException("Multiple statements not allowed");
+    if (U.contains("--") || U.contains("/*")) throw new SQLException("SQL comments not allowed");
+    if (U.matches(".*\\b(CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|EXEC|EXECUTE|CALL)\\b.*"))
+        throw new SQLException("DDL/DCL/EXEC not allowed");
+
+    final boolean isSelect = U.startsWith("SELECT") || U.startsWith("WITH");
+    if (!allowWrite && !isSelect) throw new SQLException("Write queries not allowed in read-only mode");
+
+    // 2) Asegurar uso de parámetros: nº de '?' == nº de params
+    final long placeholders = trimmed.chars().filter(ch -> ch == '?').count();
+    if (placeholders != params.size())
+        throw new SQLException("Parameter count mismatch: expected " + placeholders + " got " + params.size());
+
+    // 3) Ejecutar con PreparedStatement y límites seguros
+    try (PreparedStatement ps = connection.prepareStatement(trimmed)) {
+
+        if (isSelect) {
+            if (maxRows > 0) ps.setMaxRows(maxRows);
+            if (maxRows > 0) ps.setFetchSize(Math.min(maxRows, 1000));
+            connection.setReadOnly(true);
+        } else {
+            connection.setReadOnly(false);
+        }
+
         for (int i = 0; i < params.size(); i++) {
             ps.setObject(i + 1, params.get(i));
         }
 
-        // Diferenciar SELECT de UPDATE/INSERT
-        if (sql.trim().toUpperCase().startsWith("SELECT")) {
+        if (isSelect) {
             try (ResultSet rs = ps.executeQuery()) {
+                final java.util.List<java.util.Map<String, Object>> rows = new java.util.ArrayList<>();
+                final int colCount = rs.getMetaData().getColumnCount();
                 while (rs.next()) {
-                    // Manejo de resultados (ejemplo simple)
-                    System.out.println("Row: " + rs.getObject(1));
+                    final java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                    for (int c = 1; c <= colCount; c++) {
+                        row.put(rs.getMetaData().getColumnLabel(c), rs.getObject(c));
+                    }
+                    rows.add(row);
                 }
+                return rows;                  // ← SELECT → lista de filas (mapa)
             }
         } else {
-            ps.executeUpdate();
+            final int updated = ps.executeUpdate();
+            return Integer.valueOf(updated);  // ← DML → nº de filas afectadas
         }
     }
 }
