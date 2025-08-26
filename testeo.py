@@ -1,4 +1,20 @@
 object LogFileProcess {
+/** Escritura CSV (mismos parámetros). */
+private def writeLogsCsv(result: DataFrame, tmpPath: String): Unit =
+result.coalesce(1).write.format("com.databricks.spark.csv")
+.option("header", "true")
+.option("delimiter", FILE_CSV_DELIMITER.toString)
+.option("nullValue", "")
+.option("parserLib", "univocity")
+.option("escape", "\\")
+.mode("overwrite")
+.option("quoteMode", "NON_NUMERIC")
+.save(tmpPath + "/logs")
+
+
+/** Renombrado del único part-*.csv a nombre final. */
+private def renameLogsCsv(fs: org.apache.hadoop.fs.FileSystem, tmpPath: String, finalName: String): Unit = {
+val part = fs.globStatus(new Path(s"$tmpPath/logs/part*"))(0).getPath.getName
 val rutaCsv = new Path(tmpPath + "/logs/" + part)
 val rutaFile= new Path(tmpPath + "/logs/" + finalName)
 log.info("[SAST] rutaFile: " + rutaFile)
