@@ -1,11 +1,12 @@
-package com.santander.puntospartida
+val fields_dict_DF = spark.sqlContext.table(s"$sourcedb.fields_dict")
+  .where(col("data_date_part") === value)
+  .where(lower(col("target_table")) === prefix_table.toLowerCase())
+  .where(lower(col("src_name")).isin("execution_def", "st_metrics_input"))
 
-import com.santander.stresstest.entity.IngestEntity
-import com.santander.stresstest.util.{BoardGenericUtil, HiveUtil}
-import org.apache.log4j.LogManager
-import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession}
-import org.apache.spark.sql.functions._
-import scala.util.Try
+
+
+
+
 
 object PuntosPartidaJob {
 
