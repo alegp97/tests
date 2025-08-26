@@ -10,61 +10,71 @@ def run(
   is_incremental: String
 )(implicit spark: SparkSession): Unit = {
 
-  // --- 1) Resolve table names & dictionary context (pure, no branching) -----------------------
+  // ------------------- Resolución de nombres y diccionario (flujo lineal) -------------------
   val table  = dstTableName(targetdb, targetTable, targetTableOptionalName)
   val source = s"$sourcedb.$sourceTable"
-  val dictValueOpt = latestFieldsDictValue(sourcedb) // e.g., last data_date_part from fields_dict
+  val value  = latestFieldsDictValue(sourcedb)
 
-  // --- 2) Build column-select query from fields_dict (linear flow) ----------------------------
-  val columnsVarsDF = loadColumnsVariablesDF(sourcedb, sourceTable, targetTable, process, dictValueOpt)
-  val queryCols     = buildQuery(columnsVarsDF)
+  // ------------------- Construcción de query de columnas desde fields_dict ------------------
+  val columnsVariablesDF = loadColumnsVariablesDF(sourcedb, sourceTable, targetTable, process, value)
+  val query              = buildQuery(columnsVariablesDF)
+  log.info(s"[SAST] Query size: ${query.size}")
 
-  // --- 3) Load source & compute execId stamp + optional ORIGINAL_VALUE column -----------------
-  val filterTable               = spark.sqlContext.table(source)
-  val (saExecCols, hasStampCol) = stampColumnAndFlag(filterTable) // returns (execIdCols, hasTsOrDay)
-  val selectCols                = originalValueColIfNeeded(filterTable, sourceTable, targetTable)
-                                  .getOrElse(queryCols)
+  // ------------------- Carga de origen + exec_id + ORIGINAL_VALUE opcional ------------------
+  val filterTable                   = spark.sqlContext.table(source)
+  val (sa_exec_id_column, hasStamp) = stampColumnAndFlag(filterTable) // (lista de cols, flag)
+  val original_value_colist         = originalValueColIfNeeded(filterTable, sourceTable, targetTable)
+                                      .getOrElse(query)
 
-  // --- 4) Apply entity/incremental predicate when provided (no inline if) ---------------------
-  val baseDF = entitiesPredicate(entities, is_incremental, hasStampCol)
+  // ------------------- Filtro por entidades/incremental sin if en línea --------------------
+  val baseDF = entitiesPredicate(entities, is_incremental, hasStamp)
     .map(pred => filterTable.where(pred))
     .getOrElse(filterTable)
 
-  // --- 5) Project execId + business columns; add extra_filter when present --------------------
-  // selecting (saExecCols ++ selectCols) works whether saExecCols is empty or not
-  val projected  = baseDF.select((saExecCols ++ selectCols): _*)
-  val filtered   = Option(extra_filter).map(_.trim).filter(_.nonEmpty)
-                      .map(expr => projected.where(expr))
-                      .getOrElse(projected)
+  // ------------------- Proyección de columnas + extra_filter opcional ----------------------
+  // Seleccionar (sa_exec_id_column ++ original_value_colist) funciona aunque la primera esté vacía
+  val withExecId = baseDF.select((sa_exec_id_column ++ original_value_colist): _*)
+  val toSave0    = Option(extra_filter).map(_.trim).filter(_.nonEmpty) match {
+    case Some(f) =>
+      log.info(s"[SAST] Aplicando filtro extra : $f")
+      withExecId.where(f)
+    case None    => withExecId
+  }
 
-  // --- 6) Align with target schema and compute partitions -------------------------------------
+  // ------------------- Particiones y alineación de esquema ---------------------------------
   val partitionsName = partitionsForWrite(targetdb, targetTable, targetTableOptionalName)
+  log.info(s"[SAST] partitionsName: $partitionsName")
   val targetTableDF  = spark.sqlContext.table(table)
-  val alignedDF      = alignedToTargetSchema(filtered, targetTableDF)
+  val toSave1        = alignedToTargetSchema(toSave0, targetTableDF)
 
-  // --- 7) Apply special business rules via strategy registry (no if/else chains) --------------
-  // MKT_ET_DATA_ST  -> anti-join by process_id
-  // EDITED_INPUT -> DATA_INPUT  -> anti-join by composite keys
+  // ------------------- Reglas especiales vía estrategia (sin if/else cadenas) --------------
+  // Mantiene la lógica original: MKT_ET_DATA_ST -> anti-join por process_id
+  //                             EDITED_INPUT -> DATA_INPUT -> anti-join por claves compuestas
   val ruleKey = s"${sourceTable.trim.toUpperCase}->${targetTable.trim.toUpperCase}"
 
   val businessRules: Map[String, (DataFrame, DataFrame) => DataFrame] = Map(
-    s"MKT_ET_DATA_ST->${
-      targetTable.trim.toUpperCase
-    }" -> BusinessRules.antiByProcessId,
-    "EDITED_INPUT->DATA_INPUT"         -> BusinessRules.antiByCompositeKeys
+    s"MKT_ET_DATA_ST->${targetTable.trim.toUpperCase}" -> BusinessRules.antiByProcessId,
+    "EDITED_INPUT->DATA_INPUT"                         -> BusinessRules.antiByCompositeKeys
   ).withDefaultValue(BusinessRules.identity)
 
-  val toSave = businessRules(ruleKey)(alignedDF, targetTableDF)
+  // Logs equivalentes a los de tu código original, pero sin ramificación en línea:
+  val ruleLog: Map[String, String] = Map(
+    s"MKT_ET_DATA_ST->${targetTable.trim.toUpperCase}" -> s"[STRESSTEST] - Filtramos datos cuyos process_id ya existan en $table en business.",
+    "EDITED_INPUT->DATA_INPUT"                         -> s"[SAST] Case EDITED_INPUT -> DATA_INPUT"
+  )
+  ruleLog.get(ruleKey).foreach(msg => log.info(msg))
 
-  // --- 8) Guard clause for write; avoid count() cost & extra branching ------------------------
-  // Use head(1) to test for new rows with minimal action and no else branch.
-  val hasRows = toSave.take(1).nonEmpty
-  if (!hasRows) {
-    log.info(s"[STRESSTEST] - No new rows to write for $table.")
+  val toSave = businessRules(ruleKey)(toSave1, targetTableDF)
+
+  // ------------------- Guard clause de escritura (sin else) --------------------------------
+  // Evita count(); mismo efecto práctico que "count()>0" con menor coste y complejidad.
+  val hayDatos = toSave.take(1).nonEmpty
+  if (!hayDatos) {
+    log.info(s"[STRESSTEST] - Todos los datos a guardar ya existen en $table (o ninguno nuevo).")
     return
   }
 
-  // --- 9) Persist ---------------------------------------------------------------------------
+  log.info(s"[STRESSTEST] - Encontrados datos nuevos a guardar en $table")
   toSave
     .repartition(1)
     .write
@@ -72,6 +82,4 @@ def run(
     .mode(SaveMode.Append)
     .partitionBy(partitionsName: _*)
     .saveAsTable(table)
-
-  log.info(s"[STRESSTEST] - Written new rows into $table.")
 }
