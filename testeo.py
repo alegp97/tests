@@ -1,6 +1,16 @@
+import org.apache.log4j.LogManager
+import org.apache.spark.sql.{Column, DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.expressions.Window
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+// ADAPTADO A BDRUtils: usa BDRUtils.<campo>._1 (nuevo nombre) y literales cond_* / tablas.
 object BDRFlowsJob {
 
   val log = LogManager.getLogger(getClass.getName)
+
+  // Atajo: columna por “nuevo nombre” definido en BDRUtils (tupla (nuevo, original))
+  private def c(t: (String, String)): Column = col(t._1)
 
   // ------------------------------ RUN (CC ≲ 15) ---------------------------------------------
   def run(sourcedb: String,
@@ -25,49 +35,49 @@ object BDRFlowsJob {
     log.info(s"[SAST] isIncremental : $isIncremental")
     log.info(s"[SAST] process : $processType")
 
-    // Cargamos tmpPath del contrato en parquet (igual que tu código)
+    // Cargamos contrato desde tmpPath (igual que tu código)
     val spContractDF = spark.sqlContext.read.format("parquet").load(BDRUtils.tmpPath)
 
-    // PARTICIONES por foeperac → obtenemos fechas ordenadas y el rango [min,max]
+    // PARTICIONES por tabla de starting_points_contract → rango [min,max]
     val fechasParticiones = fechasDeParticion(targetdb)
     val (minFecha, maxFecha) = (fechasParticiones.head, fechasParticiones.last)
 
-    // DATETIME en SCALA → construimos los hitos del intervalo con paso mensual (INTERVALO_CALCULO)
+    // DATETIME en SCALA → intervalo mensual (BDRUtils.INTERVALO_CALCULO)
     val fechasFiltro = construirFechasFiltro(fechasParticiones, BDRUtils.INTERVALO_CALCULO)
 
     // Nos quedamos con los registros de las fechas calculadas
-    val dfFechas = spContractDF.where(col(BDRUtils.fecha_1).isin(fechasFiltro: _*))
+    val dfFechas = spContractDF.where(c(BDRUtils.fecha).isin(fechasFiltro: _*))
 
-    // Duplicamos el registro con la fecha mínima por contrato y desplazamos fecha duplicada a la siguiente fecha
+    // Duplicamos el registro de fecha mínima por contrato y desplazamos su fecha a la siguiente
     val dfMinFix   = duplicarMinYDesplazarFecha(dfFechas)
 
-    // Metemos row_number y “momento” (beg/end) por contrato ordenado por fecha
+    // Metemos row_number y “momento” (beg/end) por contrato
     val dfMomento  = addRowNumberYMomento(dfMinFix)
 
-    // Cambiamos el stage de beg por el del end de la fecha anterior + renombrados auxiliares
+    // Cambiamos stage del beg por el del end anterior (lag)
     val dfStage    = recalcularStageBegConLag(dfMomento)
 
-    // Lag EAD IFRS y PRVOS (se aplican sobre beg/end según reglas)
+    // EAD/PROVOS con lag según beg/end (usa ead_ifrs/prov_ifrs de BDRUtils)
     val dfEads     = calcularEadsYProvisiones(dfStage)
 
-    // Metemos flujos S1_S2 y S1_S2_FLOW + S1_S3/S2_S3 + S3_S1/S3_S2, etc. (bloques compactados)
+    // Flujos S1↔S2, S1/S3 y S2/S3, y S3↔S1/2 (compactados)
     val dfFlows12  = flujosS1S2(dfEads)
     val dfFlows13  = flujosS1S3yS2S3(dfFlows12)
     val dfFlows31  = flujosS3S1yS3S2(dfFlows13)
 
-    // Flujos Preview_TR: first/last de EAD por contrato entre beg/end
+    // Preview_TR: first/last EAD por contrato y first/lastStage
     val dfPrevTR   = calcularPreviewTR(dfFlows31)
 
-    // Reglas de FLUJO *_FLOW_TR_BEG/END (cond_minFeperac / cond_maxFeperac, firstStage/lastStage)
+    // Transferencias TR (todas *_FLOW_TR_BEG/END con condición base común)
     val dfFlowsTR  = flujosTransferenciasTR(dfPrevTR)
 
-    // Segmento COREP (original + última fecha) y columnas auxiliares de fecha/país final
+    // Segmentación COREP (texto COREP original + última fecha del intervalo)
     val dfCorep    = segmentacionCorep(dfFlowsTR)
 
-    // Reordenación de columnas y sort final (manteniendo tu lista)
+    // Reordenación de columnas y sort final
     val dfFinal    = reordenarYOrdenar(dfCorep)
 
-    // Guardamos en destino (mismos logs)
+    // Guardamos en destino
     println(s"RESULTADO GUARDADO EN : $source")
     dfFinal.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(s"$source")
 
@@ -101,104 +111,91 @@ object BDRFlowsJob {
   }
 
   /** Duplica min(fecha) por contrato, marca 'dup' y mueve esa fecha al siguiente día de partición. */
-  private def duplicarMinYDesplazarFecha(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val wByContrato = Window.partitionBy(BDRUtils.id_contrato_1)
-    val minFecha = min(col(BDRUtils.fecha_1)).over(wByContrato)
-    val dfDup = df.withColumn("dup", when(col(BDRUtils.fecha_1) === minFecha, lit("DUPLICAR")))
-    val dfWithNext = dfDup.withColumn("nextDate",
-      lead(col(BDRUtils.fecha_1), 1).over(wByContrato.orderBy(col(BDRUtils.fecha_1).asc))
-    )
+  private def duplicarMinYDesplazarFecha(df: DataFrame)(implicit spark: SparkSession): DataFrame = {
+    val wContrato = Window.partitionBy(c(BDRUtils.id_contrato))
+    val minFecha = min(c(BDRUtils.fecha)).over(wContrato)
+    val wOrden   = wContrato.orderBy(c(BDRUtils.fecha).asc)
+
+    val dfDup = df.withColumn("dup", when(c(BDRUtils.fecha) === minFecha, lit("DUPLICAR")))
+    val dfWithNext = dfDup.withColumn("nextDate", lead(c(BDRUtils.fecha), 1).over(wOrden))
+
     dfWithNext
-      .withColumn("newFecha",
-        when(col("dup") === "DUPLICAR", col("nextDate")).otherwise(col(BDRUtils.fecha_1))
-      )
+      .withColumn("newFecha", when(col("dup") === "DUPLICAR", col("nextDate")).otherwise(c(BDRUtils.fecha)))
       .drop("dup", "nextDate")
-      .withColumnRenamed("newFecha", BDRUtils.fecha_1)
+      .withColumnRenamed("newFecha", BDRUtils.fecha._1)
   }
 
   /** Añade row_number por contrato y columna 'momento' beg/end. */
   private def addRowNumberYMomento(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col(BDRUtils.fecha_1).asc)
+    val w = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(c(BDRUtils.fecha).asc)
     df.withColumn("row_number", row_number().over(w))
       .withColumn("momento", when(col("row_number") % 2 === 0, lit("beg")).otherwise(lit("end")))
   }
 
-  /** Cambia stage del beg por el del end anterior (lag) y deja stageFinal, ead ifrs aux, etc. */
+  /** Cambia stage del beg por el del end anterior (lag) y deja stageFinal. */
   private def recalcularStageBegConLag(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val wByContratoAsc = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col(BDRUtils.fecha_1).asc)
-    val lagStage = lag(col(BDRUtils.stage_1), 1).over(wByContratoAsc)
-    df.withColumn("stageAux",
-        when(col("momento") === "beg", lagStage).otherwise(col(BDRUtils.stage_1))
-      )
-      .withColumn("stageFinal",
-        when(col("momento") === "beg", col("stageAux")).otherwise(col(BDRUtils.stage_1))
-      )
+    val wAsc = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(c(BDRUtils.fecha).asc)
+    val lagStage = lag(c(BDRUtils.stage), 1).over(wAsc)
+    df.withColumn("stageAux",  when(col("momento") === "beg", lagStage).otherwise(c(BDRUtils.stage)))
+      .withColumn("stageFinal",when(col("momento") === "beg", col("stageAux")).otherwise(c(BDRUtils.stage)))
       .drop("stageAux")
   }
 
   /** Calcula columnas EAD y PROVOS según beg/end con lag correspondiente. */
   private def calcularEadsYProvisiones(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("row_number").asc)
-    val lagEad    = lag(col(BDRUtils.ead_ifrs_1), 1).over(w)
-    val lagProvOS = lag(col(BDRUtils.prov_ifrs_), 1).over(w)
+    val w = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("row_number").asc)
+    val lagEad  = lag(c(BDRUtils.ead_ifrs), 1).over(w)
+    val lagProv = lag(c(BDRUtils.prov_ifrs), 1).over(w)
 
-    df.withColumn("EAD_S1_IFRS", when(col("momento") === "beg", lagEad).otherwise(col(BDRUtils.ead_ifrs_1)))
-      .withColumn("EAD_S2_IFRS", when(col("momento") === "beg", lagEad).otherwise(col(BDRUtils.ead_ifrs_2)))
-      .withColumn("EAD_S3_IFRS", when(col("momento") === "beg", lagEad).otherwise(col(BDRUtils.ead_ifrs_3)))
-      .withColumn("PROV_S1_IFRS", when(col("momento") === "beg", lagProvOS).otherwise(col(BDRUtils.prov_ifrs_1)))
-      .withColumn("PROV_S2_IFRS", when(col("momento") === "beg", lagProvOS).otherwise(col(BDRUtils.prov_ifrs_2)))
-      .withColumn("PROV_S3_IFRS", when(col("momento") === "beg", lagProvOS).otherwise(col(BDRUtils.prov_ifrs_3)))
-      // Limpieza de NULLS (mantengo tu intención)
+    df.withColumn("EAD_S1_IFRS", when(col("momento") === "beg", lagEad).otherwise(c(BDRUtils.ead_ifrs)))
+      .withColumn("EAD_S2_IFRS", when(col("momento") === "beg", lagEad).otherwise(c(BDRUtils.ead_ifrs)))
+      .withColumn("EAD_S3_IFRS", when(col("momento") === "beg", lagEad).otherwise(c(BDRUtils.ead_ifrs)))
+      .withColumn("PROV_S1_IFRS", when(col("momento") === "beg", lagProv).otherwise(c(BDRUtils.prov_ifrs)))
+      .withColumn("PROV_S2_IFRS", when(col("momento") === "beg", lagProv).otherwise(c(BDRUtils.prov_ifrs)))
+      .withColumn("PROV_S3_IFRS", when(col("momento") === "beg", lagProv).otherwise(c(BDRUtils.prov_ifrs)))
+      // Limpieza de NULLS
       .withColumn("EAD_S1_IFRS", when(col("EAD_S1_IFRS").isNull, lit(0)).otherwise(col("EAD_S1_IFRS")))
       .withColumn("EAD_S2_IFRS", when(col("EAD_S2_IFRS").isNull, lit(0)).otherwise(col("EAD_S2_IFRS")))
       .withColumn("EAD_S3_IFRS", when(col("EAD_S3_IFRS").isNull, lit(0)).otherwise(col("EAD_S3_IFRS")))
   }
 
-  // ---------- Bloques de flujos compactados (S1/S2, S1/S3-S2/S3, S3/S1-S3/S2) ----------------
+  // ---------- Flujos compactados (S1/S2, S1/S3-S2/S3, S3/S1-S3/S2) ---------------------------
 
   private def flujosS1S2(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("row_number").asc)
-    val lagStage = lag(col(BDRUtils.stage_1), 1).over(w)
+    val w = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("row_number").asc)
+    val lagStage = lag(c(BDRUtils.stage), 1).over(w)
 
-    df.withColumn("ind_S2_S1", when(col("momento") === "end" && col(BDRUtils.stage_1) === 1 && (lagStage === 2), lit(1)).otherwise(lit(0)))
+    df.withColumn("ind_S2_S1", when(col("momento") === "end" && c(BDRUtils.stage) === 1 && (lagStage === 2), lit(1)).otherwise(lit(0)))
       .withColumn("s1_s2_FLOW", when(col("momento") === "end" && col("ind_S2_S1") === 1, col("EAD_S1_IFRS")).otherwise(lit(0)))
-      .withColumn("ind_S1_S2", when(col("momento") === "end" && col(BDRUtils.stage_1) === 2 && (lagStage === 1), lit(1)).otherwise(lit(0)))
+      .withColumn("ind_S1_S2", when(col("momento") === "end" && c(BDRUtils.stage) === 2 && (lagStage === 1), lit(1)).otherwise(lit(0)))
       .withColumn("s1_S2_FLOW", when(col("momento") === "end" && col("ind_S1_S2") === 1, col("EAD_S2_IFRS")).otherwise(lit(0)))
   }
 
   private def flujosS1S3yS2S3(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("row_number").asc)
-    val lagStage = lag(col(BDRUtils.stage_1), 1).over(w)
+    val w = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("row_number").asc)
+    val lagStage = lag(c(BDRUtils.stage), 1).over(w)
 
-    df.withColumn("ind_S1_S3", when(col("momento") === "end" && col(BDRUtils.stage_1) === 3 && (lagStage === 1), lit(1)).otherwise(lit(0)))
+    df.withColumn("ind_S1_S3", when(col("momento") === "end" && c(BDRUtils.stage) === 3 && (lagStage === 1), lit(1)).otherwise(lit(0)))
       .withColumn("s1_s3_FLOW", when(col("momento") === "end" && col("ind_S1_S3") === 1, col("EAD_S3_IFRS")).otherwise(lit(0)))
-      .withColumn("ind_S2_S3", when(col("momento") === "end" && col(BDRUtils.stage_1) === 3 && (lagStage === 2), lit(1)).otherwise(lit(0)))
+      .withColumn("ind_S2_S3", when(col("momento") === "end" && c(BDRUtils.stage) === 3 && (lagStage === 2), lit(1)).otherwise(lit(0)))
       .withColumn("s2_s3_FLOW", when(col("momento") === "end" && col("ind_S2_S3") === 1, col("EAD_S3_IFRS")).otherwise(lit(0)))
   }
 
   private def flujosS3S1yS3S2(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("row_number").asc)
-    val lagStage = lag(col(BDRUtils.stage_1), 1).over(w)
+    val w = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("row_number").asc)
+    val lagStage = lag(c(BDRUtils.stage), 1).over(w)
 
-    df.withColumn("ind_S3_S1", when(col("momento") === "end" && col(BDRUtils.stage_1) === 1 && (lagStage === 3), lit(1)).otherwise(lit(0)))
+    df.withColumn("ind_S3_S1", when(col("momento") === "end" && c(BDRUtils.stage) === 1 && (lagStage === 3), lit(1)).otherwise(lit(0)))
       .withColumn("s3_s1_FLOW", when(col("momento") === "end" && col("ind_S3_S1") === 1, lag(col("EAD_S3_IFRS"), 1).over(w)).otherwise(lit(0)))
-      .withColumn("ind_S3_S2", when(col("momento") === "end" && col(BDRUtils.stage_1) === 2 && (lagStage === 3), lit(1)).otherwise(lit(0)))
+      .withColumn("ind_S3_S2", when(col("momento") === "end" && c(BDRUtils.stage) === 2 && (lagStage === 3), lit(1)).otherwise(lit(0)))
       .withColumn("s3_s2_FLOW", when(col("momento") === "end" && col("ind_S3_S2") === 1, lag(col("EAD_S2_IFRS"), 1).over(w)).otherwise(lit(0)))
   }
 
   // ---------- Preview_TR (first/last por ventana beg/end) -----------------------------------
 
   private def calcularPreviewTR(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val wBeg = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("momento") === "beg")
-    val wEnd = Window.partitionBy(BDRUtils.id_contrato_1).orderBy(col("momento") === "end")
+    val wBeg = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("momento") === "beg")
+    val wEnd = Window.partitionBy(c(BDRUtils.id_contrato)).orderBy(col("momento") === "end")
 
     df.withColumn("firstBegS1", first(col("EAD_S1_IFRS")).over(wBeg))
       .withColumn("firstBegS2", first(col("EAD_S2_IFRS")).over(wBeg))
@@ -206,62 +203,62 @@ object BDRFlowsJob {
       .withColumn("lastEndS1", last(col("EAD_S1_IFRS")).over(wEnd))
       .withColumn("lastEndS2", last(col("EAD_S2_IFRS")).over(wEnd))
       .withColumn("lastEndS3", last(col("EAD_S3_IFRS")).over(wEnd))
-      .withColumn("firstStage", first(col(BDRUtils.stage_1)).over(wBeg))
-      .withColumn("lastStage",  last(col(BDRUtils.stage_1)).over(wEnd))
+      .withColumn("firstStage", first(c(BDRUtils.stage)).over(wBeg))
+      .withColumn("lastStage",  last(c(BDRUtils.stage)).over(wEnd))
   }
 
   // ---------- Transferencias TR (todas las *_FLOW_TR_BEG/END compactadas) --------------------
 
   private def flujosTransferenciasTR(df: DataFrame): DataFrame = {
-    // factor común de condición TR por rango y stage
-    def condTR(minC: Column, maxC: Column, stFirst: Int, stLast: Int): Column =
-      (col("minFeperac") === minC) && (col("maxFeperac") === maxC) &&
-        (col("firstStage") === lit(stFirst)) && (col("lastStage") === lit(stLast)) &&
-        (col("momento") === "beg")
+    val minC = lit(BDRUtils.cond_minFeperac)
+    val maxC = lit(BDRUtils.cond_maxFeperac)
+
+    def condTR(stFirst: Int, stLast: Int, momentoBeg: Boolean): Column = {
+      val base = (col("minFeperac") === minC) && (col("maxFeperac") === maxC) &&
+                 (col("firstStage") === lit(stFirst)) && (col("lastStage") === lit(stLast))
+      if (momentoBeg) base && (col("momento") === "beg") else base && (col("momento") === "end")
+    }
 
     df
-      .withColumn("S1_S2_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 1, 2),  lit(col("firstBegS1"))).otherwise(lit(0)))
-      .withColumn("S1_S2_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 1, 2) && col("momento")==="end", lit(col("lastEndS2"))).otherwise(lit(0)))
-      .withColumn("S1_S3_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 1, 3),  lit(col("firstBegS1"))).otherwise(lit(0)))
-      .withColumn("S1_S3_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 1, 3) && col("momento")==="end", lit(col("lastEndS3"))).otherwise(lit(0)))
-      .withColumn("S2_S3_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 2, 3),  lit(col("firstBegS2"))).otherwise(lit(0)))
-      .withColumn("S2_S3_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 2, 3) && col("momento")==="end", lit(col("lastEndS3"))).otherwise(lit(0)))
-      .withColumn("S2_S1_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 2, 1),  lit(col("firstBegS2"))).otherwise(lit(0)))
-      .withColumn("S2_S1_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 2, 1) && col("momento")==="end", lit(col("lastEndS1"))).otherwise(lit(0)))
-      .withColumn("S3_S1_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 3, 1),  lit(col("firstBegS3"))).otherwise(lit(0)))
-      .withColumn("S3_S1_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 3, 1) && col("momento")==="end", lit(col("lastEndS1"))).otherwise(lit(0)))
-      .withColumn("S3_S2_FLOW_TR_BEG", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 3, 2),  lit(col("firstBegS3"))).otherwise(lit(0)))
-      .withColumn("S3_S2_FLOW_TR_END", when(condTR(BDRUtils.cond_minFeperac, BDRUtils.cond_maxFeperac, 3, 2) && col("momento")==="end", lit(col("lastEndS2"))).otherwise(lit(0)))
+      .withColumn("S1_S2_FLOW_TR_BEG", when(condTR(1, 2, momentoBeg = true),  col("firstBegS1")).otherwise(lit(0)))
+      .withColumn("S1_S2_FLOW_TR_END", when(condTR(1, 2, momentoBeg = false), col("lastEndS2")).otherwise(lit(0)))
+      .withColumn("S1_S3_FLOW_TR_BEG", when(condTR(1, 3, momentoBeg = true),  col("firstBegS1")).otherwise(lit(0)))
+      .withColumn("S1_S3_FLOW_TR_END", when(condTR(1, 3, momentoBeg = false), col("lastEndS3")).otherwise(lit(0)))
+      .withColumn("S2_S3_FLOW_TR_BEG", when(condTR(2, 3, momentoBeg = true),  col("firstBegS2")).otherwise(lit(0)))
+      .withColumn("S2_S3_FLOW_TR_END", when(condTR(2, 3, momentoBeg = false), col("lastEndS3")).otherwise(lit(0)))
+      .withColumn("S2_S1_FLOW_TR_BEG", when(condTR(2, 1, momentoBeg = true),  col("firstBegS2")).otherwise(lit(0)))
+      .withColumn("S2_S1_FLOW_TR_END", when(condTR(2, 1, momentoBeg = false), col("lastEndS1")).otherwise(lit(0)))
+      .withColumn("S3_S1_FLOW_TR_BEG", when(condTR(3, 1, momentoBeg = true),  col("firstBegS3")).otherwise(lit(0)))
+      .withColumn("S3_S1_FLOW_TR_END", when(condTR(3, 1, momentoBeg = false), col("lastEndS1")).otherwise(lit(0)))
+      .withColumn("S3_S2_FLOW_TR_BEG", when(condTR(3, 2, momentoBeg = true),  col("firstBegS3")).otherwise(lit(0)))
+      .withColumn("S3_S2_FLOW_TR_END", when(condTR(3, 2, momentoBeg = false), col("lastEndS2")).otherwise(lit(0)))
   }
 
-  // ---------- Segmentación COREP y cálculo de fecha/país final --------------------------------
+  // ---------- Segmentación COREP -------------------------------------------------------------
 
   private def segmentacionCorep(df: DataFrame): DataFrame = {
-    import org.apache.spark.sql.expressions.Window
-    val w = Window.partitionBy(BDRUtils.id_contrato_1)
-
     val segCorepText =
-      when(col("categoria") === 16 && col("subcategoria") === 16 && col("flag_gar") > 0, lit(BDRUtils.segCorep_text_SM_Sec))
-        .when(col("categoria") === 16 && col("subcategoria") === 16 && col("flag_gar") === 0, lit(BDRUtils.segCorep_text_SM_NSec))
-        .when(col("categoria") === 16 && col("subcategoria") === 0  && col("flag_gar") > 0, lit(BDRUtils.segCorep_text_Other_Sec))
-        .when(col("categoria") === 16 && col("subcategoria") === 0  && col("flag_gar") === 0, lit(BDRUtils.segCorep_text_Other_NSec))
-        .when(col("flag_sme") === 1, lit(BDRUtils.segCorep_text_Other_SME))
+      when(c(BDRUtils.categoria) === 16 && c(BDRUtils.subcategoria) === 16 && c(BDRUtils.flag_gar) > 0, lit(BDRUtils.segCorep_text_SM_Sec))
+        .when(c(BDRUtils.categoria) === 16 && c(BDRUtils.subcategoria) === 16 && c(BDRUtils.flag_gar) === 0, lit(BDRUtils.segCorep_text_SM_NSec))
+        .when(c(BDRUtils.categoria) === 16 && c(BDRUtils.subcategoria) === 0  && c(BDRUtils.flag_gar) > 0, lit(BDRUtils.segCorep_text_Other_Sec))
+        .when(c(BDRUtils.categoria) === 16 && c(BDRUtils.subcategoria) === 0  && c(BDRUtils.flag_gar) === 0, lit(BDRUtils.segCorep_text_Other_NSec))
+        .when(c(BDRUtils.flag_sme) === 1, lit(BDRUtils.segCorep_text_Other_SME))
         .otherwise(lit(BDRUtils.segCorep_text_Other))
 
+    // “Fecha final” para COREP en el fin del intervalo
+    val maxC = lit(BDRUtils.cond_maxFeperac)
     df.withColumn("seg_COREP", segCorepText)
       .withColumn("seg_COREP_DateFinal",
-        when(col(BDRUtils.fecha_1) === BDRUtils.cond_maxFeperac && col("momento") === "end", col(BDRUtils.fecha_1))
-          .otherwise(when(col(BDRUtils.fecha_1) === BDRUtils.cond_maxFeperac && col("momento") === "end", col(BDRUtils.segCorep_text_Other)))
+        when(c(BDRUtils.fecha) === maxC && col("momento") === "end", c(BDRUtils.fecha)).otherwise(lit(null))
       )
-      .withColumn("id_pais_dateFinal", max(col("id_pais_final")).over(w))
   }
 
   // ---------- Orden/selección de columnas -----------------------------------------------------
 
   private def reordenarYOrdenar(df: DataFrame): DataFrame = {
     val reorderedColumnNames: Array[String] = Array(
-      "fecha","momento","empresa","id_contrato","stage","seg_COREP","seg_COREP_Final",
-      "EAD_S1_IFRS","EAD_S2_IFRS","EAD_S3_IFRS","EAD_S1_cap","EAD_S2_cap","EAD_S3_cap",
+      BDRUtils.fecha._1,"momento","empresa",BDRUtils.id_contrato._1,"stage",
+      "seg_COREP","seg_COREP_Final","EAD_S1_IFRS","EAD_S2_IFRS","EAD_S3_IFRS",
       "PROV_S1_IFRS","PROV_S2_IFRS","PROV_S3_IFRS",
       "ind_S1_S2","s1_S2_FLOW","ind_S1_S3","s1_s3_FLOW","ind_S2_S3","s2_s3_FLOW",
       "S1_S2_FLOW_TR_BEG","S1_S2_FLOW_TR_END","S1_S3_FLOW_TR_BEG","S1_S3_FLOW_TR_END",
@@ -269,14 +266,14 @@ object BDRFlowsJob {
       "S3_S1_FLOW_TR_BEG","S3_S1_FLOW_TR_END","S3_S2_FLOW_TR_BEG","S3_S2_FLOW_TR_END",
       "row_number"
     )
-    df.sort(asc(BDRUtils.id_contrato_1), asc(BDRUtils.fecha_1), asc("row_number"))
+    df.sort(asc(BDRUtils.id_contrato._1), asc(BDRUtils.fecha._1), asc("row_number"))
       .select(reorderedColumnNames.head, reorderedColumnNames.tail: _*)
   }
 
   // ---------- Limpieza tmp HDFS ---------------------------------------------------------------
 
-  private def borrarTmpHDFS(tmpPath: String): Unit = {
-    val fs = HDFSHandler.getFileSystem(BDRUtils.tmpPath)
+  private def borrarTmpHDFS(tmpPath: String)(implicit spark: SparkSession): Unit = {
+    val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
     val pathFile = new Path(tmpPath)
     if (fs.exists(pathFile)) fs.delete(pathFile, true)
   }
