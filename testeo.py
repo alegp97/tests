@@ -1,26 +1,23 @@
+#!/usr/bin/env python
+from pyspark.sql import SparkSession
 
-def get_source():
-    # 1) Preferir inyección desde el notebook
-    for k in ("source", "table_name", "RUTA_TABLA"):
-        if k in globals() and str(globals()[k]).strip():
-            return str(globals()[k]).strip()
-    # 2) Fallback a argv si lo ejecutas como script
-    if len(sys.argv) >= 2:
-        return sys.argv[1]
-    raise SystemExit("Uso: run_tabla.py <catalog.schema.table | ruta delta>")
+# Pon aquí tu ruta (ABFS/DBFS/S3/local montado)
+XLSX_PATH = "abfss://<container>@<account>.dfs.core.windows.net/ruta/archivo.xlsx"
+# Ejemplos:
+# XLSX_PATH = "dbfs:/FileStore/tables/ejemplo.xlsx"
+# XLSX_PATH = "/dbfs/FileStore/tables/ejemplo.xlsx"  # vía FUSE
 
-# Reutiliza la sesión del notebook si existe; si no, crea una
-spark = globals().get("spark") or SparkSession.builder.appName("Tabla-Launcher").getOrCreate()
+spark = SparkSession.builder.appName("ReadXLSX").getOrCreate()
 
-source = get_source()
+df = (
+    spark.read
+         .format("com.crealytics.spark.excel")
+         .option("header", "true")        # usa la primera fila como cabecera
+         .option("inferSchema", "true")    # infiere tipos
+         # .option("sheetName", "Hoja1")   # opcional: especifica hoja
+         .load(XLSX_PATH)
+)
 
-# Carga por ruta Delta (abfss:/dbfs:/s3:/...) o por nombre UC
-if is_path(source):
-    df = spark.read.format("delta").load(source)
-else:
-    df = spark.table(source)
+df.show(10, truncate=False)
 
-print("Spark appId:", spark.sparkContext.applicationId)
-print("Versión Spark:", spark.version)
-df.show(20, truncate=False)
-print("count:", df.count())
+spark.stop()
