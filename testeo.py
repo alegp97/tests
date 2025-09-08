@@ -1,24 +1,26 @@
-#!/usr/bin/env python
-import sys
-from pyspark.sql import SparkSession
 
-def is_path(s: str) -> bool:
-    return s.startswith("/") or s.startswith("dbfs:/") or "://" in s
+def get_source():
+    # 1) Preferir inyección desde el notebook
+    for k in ("source", "table_name", "RUTA_TABLA"):
+        if k in globals() and str(globals()[k]).strip():
+            return str(globals()[k]).strip()
+    # 2) Fallback a argv si lo ejecutas como script
+    if len(sys.argv) >= 2:
+        return sys.argv[1]
+    raise SystemExit("Uso: run_tabla.py <catalog.schema.table | ruta delta>")
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise SystemExit("Uso: run_bdr.py <catalog.schema.table | ruta delta>")
+# Reutiliza la sesión del notebook si existe; si no, crea una
+spark = globals().get("spark") or SparkSession.builder.appName("Tabla-Launcher").getOrCreate()
 
-    source = sys.argv[1]
-    spark = SparkSession.builder.appName("BDR-Launcher").getOrCreate()
+source = get_source()
 
-    # Lee por nombre de tabla o por ruta (asumimos Delta si es ruta)
-    if is_path(source):
-        df = spark.read.format("delta").load(source)
-    else:
-        df = spark.table(source)
+# Carga por ruta Delta (abfss:/dbfs:/s3:/...) o por nombre UC
+if is_path(source):
+    df = spark.read.format("delta").load(source)
+else:
+    df = spark.table(source)
 
-    df.show(20, truncate=False)
-    print("count:", df.count())
-    print("Spark appId:", spark.sparkContext.applicationId)
-    spark.stop()
+print("Spark appId:", spark.sparkContext.applicationId)
+print("Versión Spark:", spark.version)
+df.show(20, truncate=False)
+print("count:", df.count())
