@@ -1,58 +1,55 @@
-protected void convertExcelToJSON(String inputFile, String outputFile) throws Exception {
-    org.apache.hadoop.fs.FileSystem fs = null;
+try {
+    // 1. Crear el Workbook desde el archivo Excel
+    Workbook wb = null;
     try {
-        fs = HDFShandler.getNewFileSystem(inputFile);
-        Path excelPath = new Path(inputFile);
-        if (!fs.exists(excelPath)) {
-            LOGGER.info("[ERESEARCH] - File not exists: " + excelPath);
-            if (!fs.exists(new Path(outputFile))) {
-                LOGGER.error("File must exist: []" + inputFile);
-                throw new IOException("File must exist: " + inputFile);
-            }
-        } else {
-            String timeSuffix = String.valueOf(Calendar.getInstance().getTimeInMillis());
-            String processedFile = inputFile + ".processed_" + timeSuffix;
-            String errorFile = inputFile + ".error_" + timeSuffix;
-
-            Workbook wb = null;
-            try {
-                wb = WorkbookFactory.create(fs.open(excelPath));
-                MaltsInfo config = obtainJsonConfig(wb);
-                writeJsonConfig(outputFile, config);
-                // Si todo va bien, movemos el archivo a procesados
-                copyFile(inputFile, processedFile, true);
-            } catch (InvalidFormatException e) {
-                LOGGER.error("Invalid format for Excel file: " + inputFile, e);
-                copyFile(inputFile, errorFile, true);
-                throw new IOException("Invalid format for Excel file: " + inputFile, e);
-            } catch (IOException e) {
-                LOGGER.error("I/O error while processing Excel file: " + inputFile, e);
-                copyFile(inputFile, errorFile, true);
-                throw new IOException("I/O error while processing Excel file: " + inputFile, e);
-            } catch (Exception e) {
-                LOGGER.error("Unexpected error while processing Excel file: " + inputFile, e);
-                copyFile(inputFile, errorFile, true);
-                throw new IOException("Unexpected error while processing Excel file: " + inputFile, e);
-            } finally {
-                if (wb != null) {
-                    try {
-                        wb.close();
-                    } catch (Exception e) {
-                        LOGGER.warn("Failed to close workbook", e);
-                    }
-                }
-            }
-        }
+        wb = WorkbookFactory.create(fs.open(excelPath));
+    } catch (InvalidFormatException e) {
+        LOGGER.error("Formato de archivo Excel no válido: " + inputFile, e);
+        throw new IOException("Formato de archivo Excel no válido: " + inputFile, e);
+    } catch (EncryptedDocumentException e) {
+        LOGGER.error("El archivo Excel está encriptado: " + inputFile, e);
+        throw new IOException("El archivo Excel está encriptado: " + inputFile, e);
     } catch (IOException e) {
-        LOGGER.error("Could not obtain configuration from excel file " + inputFile);
-        throw new IOException("Could not obtain configuration from excel file " + inputFile, e);
-    } finally {
-        if (fs != null) {
-            try {
-                fs.close();
-            } catch (Exception e) {
-                LOGGER.error("Error closing file system");
-            }
+        LOGGER.error("Error de E/S al leer el archivo Excel: " + inputFile, e);
+        throw new IOException("Error de E/S al leer el archivo Excel: " + inputFile, e);
+    } catch (Exception e) {
+        LOGGER.error("Error inesperado al abrir el archivo Excel: " + inputFile, e);
+        throw new IOException("Error inesperado al abrir el archivo Excel: " + inputFile, e);
+    }
+
+    // 2. Obtener la configuración JSON desde el Workbook
+    MaltsInfo config = null;
+    try {
+        config = obtainJsonConfig(wb);
+    } catch (IllegalArgumentException e) {
+        LOGGER.error("Datos inválidos en el archivo Excel: " + inputFile, e);
+        throw new IOException("Datos inválidos en el archivo Excel: " + inputFile, e);
+    } catch (NullPointerException e) {
+        LOGGER.error("Estructura de datos incorrecta en el archivo Excel: " + inputFile, e);
+        throw new IOException("Estructura de datos incorrecta en el archivo Excel: " + inputFile, e);
+    } catch (Exception e) {
+        LOGGER.error("Error inesperado al procesar el archivo Excel: " + inputFile, e);
+        throw new IOException("Error inesperado al procesar el archivo Excel: " + inputFile, e);
+    }
+
+    // 3. Escribir la configuración JSON en el archivo de salida
+    try {
+        writeJsonConfig(outputFile, config);
+    } catch (IOException e) {
+        LOGGER.error("Error de E/S al escribir el archivo JSON: " + outputFile, e);
+        throw new IOException("Error de E/S al escribir el archivo JSON: " + outputFile, e);
+    } catch (Exception e) {
+        LOGGER.error("Error inesperado al escribir el archivo JSON: " + outputFile, e);
+        throw new IOException("Error inesperado al escribir el archivo JSON: " + outputFile, e);
+    }
+
+} finally {
+    // Asegurarse de cerrar el Workbook si está abierto
+    if (wb != null) {
+        try {
+            wb.close();
+        } catch (Exception e) {
+            LOGGER.warn("Error al cerrar el Workbook: " + inputFile, e);
         }
     }
 }
