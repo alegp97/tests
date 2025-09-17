@@ -1,182 +1,35 @@
-1) Notebook
+1. **Notebook:** Ejecuta un cuaderno de Databricks. Ideal para pruebas y tareas sencillas; puedes pasarle parámetros y hasta instalar librerías dentro del propio notebook.
 
-Qué hace: Ejecuta un notebook de Databricks.
+2. **Python script:** Corre un archivo `.py` tal cual. Útil para scripts simples sin necesidad de empaquetar nada.
 
-Cuándo: Prototipos, pipelines ligeros, orquestación con %run, widgets/params.
+3. **SQL query:** Lanza una consulta SQL guardada sobre un SQL Warehouse. Perfecto cuando todo se resuelve con SQL (sin clúster Spark).
 
-Entradas: notebook_path, base_parameters (widgets), cluster/warehouse.
+4. **SQL file:** Ejecuta un archivo `.sql` completo (creación/modificación de tablas, cargas). Bueno para cambios versionados en Git.
 
-Notas: Ideal para pip install in-notebook si no puedes instalar libs a nivel de cluster. Versiona con Repos.
+5. **SQL alert:** Comprueba una alerta SQL y avisa si se cumple una condición. Sirve para vigilar SLAs o calidad de datos.
 
-2) Python script
+6. **Ingestion pipeline:** Asistente para traer datos desde apps y bases de datos a tablas en Databricks. Muy útil para cargas periódicas e incrementales (CDC).
 
-Qué hace: Lanza un .py con Spark (spark_python_task).
+7. **ETL Pipeline:** Desencadena un pipeline declarativo (p. ej., Delta Live Tables) que transforma datos y aplica reglas de calidad automáticamente.
 
-Cuándo: Scripts simples empaquetados como archivo suelto.
+8. **dbt:** Ejecuta un proyecto **dbt** (modelos y tests en SQL) sobre Databricks. Ideal si tu equipo ya trabaja con dbt.
 
-Entradas: python_file (DBFS/Repo), parameters.
+9. **Run Job:** Lanza otro **Job** existente. Útil para encadenar procesos o reutilizar pipelines.
 
-Notas: Menos “dev-ex” que wheel; perfecto si no necesitas packaging.
+10. **If/else condition:** Toma decisiones en el flujo (rama “si” / “si no”) según una condición sencilla, como el entorno o la fecha.
 
-3) SQL query
+11. **For each:** Repite una tarea para una lista de elementos (clientes, fechas, regiones) con control del paralelismo.
 
-Qué hace: Ejecuta una query almacenada en SQL (SQL Warehouse).
+12. **Python wheel:** Ejecuta la entrada de un paquete Python empaquetado (`.whl`). Enfoque profesional y reproducible para producción.
 
-Cuándo: ETLs/analíticas puras en SQL, sin Spark cluster.
+13. **JAR:** Corre una clase `main` de un **JAR** (Scala/Java) en Spark. Robusto y muy usado en entornos productivos.
 
-Entradas: query_id, warehouse_id, parámetros de la query.
+14. **Spark Submit:** Lanza Spark con parámetros avanzados como en `spark-submit`. Máxima flexibilidad cuando lo estándar no basta.
 
-Notas: Usa Serverless SQL cuando puedas; control de coste y arranque rápido.
+15. **Clean Room notebook:** Ejecuta un notebook dentro de un entorno de colaboración seguro (Clean Room), con restricciones de acceso y salida.
 
-4) SQL file
+16. **Legacy dashboard:** Refresca un panel “clásico” de Databricks SQL y lo envía a los suscriptores. Útil si aún usas dashboards antiguos.
 
-Qué hace: Ejecuta un archivo .sql (DDL/DML) contra un Warehouse.
+17. **Power BI:** Orquesta la actualización de datasets/modelos semánticos de Power BI desde Databricks de forma automática.
 
-Cuándo: Migraciones/seed, tareas largas de SQL versionadas en Git.
-
-Entradas: path del fichero, warehouse_id.
-
-Notas: Útil para infra de datos como código (IaC).
-
-5) SQL alert
-
-Qué hace: Evalúa un alert de Databricks SQL y notifica si se cumple la condición.
-
-Cuándo: Monitorizar SLAs, umbrales, calidad de datos.
-
-Entradas: alert_id, warehouse_id.
-
-Notas: Encadena con tareas de remediación vía dependencias.
-
-Ingestion & Transformation
-6) Ingestion pipeline
-
-Qué hace: Orquesta ingesta desde SaaS/DBs a tablas (conectores gestionados).
-
-Cuándo: Captura incremental de orígenes externos y RDBMS.
-
-Entradas: Conexiones/credenciales, mapping a destinos.
-
-Notas: Ideal para CDC y cargas periódicas sin mucho código.
-
-7) ETL Pipeline
-
-Qué hace: Desencadena un pipeline declarativo de transformación (p.ej. DLT).
-
-Cuándo: Curado/orquestación de broncé-silver-gold con calidad.
-
-Entradas: pipeline_id, flags (full refresh, etc.).
-
-Notas: Hereda reglas de calidad y auto-gestiona dependencias.
-
-8) dbt
-
-Qué hace: Ejecuta un proyecto dbt en Databricks.
-
-Cuándo: Modelado SQL con tests, docs y macros dbt.
-
-Entradas: project_directory, commands (ej. dbt run, dbt test), schema, profiles.
-
-Notas: Usa un SQL Warehouse; perfecto para equipos con estándar dbt.
-
-Advanced
-9) Run Job
-
-Qué hace: Lanza otro Job del workspace (fan-out/fan-in).
-
-Cuándo: Reutilizar pipelines ya definidos; composiciones jerárquicas.
-
-Entradas: job_id, job_parameters.
-
-Notas: Controla concurrencia del hijo; ojo a bucles de llamadas.
-
-10) If/else condition
-
-Qué hace: Evalúa una condición y redirecciona el flujo.
-
-Cuándo: Branching por entorno/fecha/resultado de tareas.
-
-Entradas: Expresión/operador y ramas if / else.
-
-Notas: Muy útil para cortes de seguridad y caminos alternativos.
-
-11) For each
-
-Qué hace: Repite una tarea anidada para cada elemento de una lista.
-
-Cuándo: Procesar particiones, clientes, regiones, fechas.
-
-Entradas: Lista (literal, param o salida de otra task), task hija parametrizada.
-
-Notas: Controla paralelismo; limita fan-out para no saturar clúster/WH.
-
-12) Python wheel
-
-Qué hace: Ejecuta un entry point de un paquete Python (.whl).
-
-Cuándo: Producción/CI con packaging, dependencias fijas.
-
-Entradas: libraries.whl, package_name, entry_point, parameters.
-
-Notas: Reproducible; perfecto para MLOps/ETL robusto.
-
-13) JAR
-
-Qué hace: Ejecuta una clase main de un JAR Spark.
-
-Cuándo: Pipelines en Scala/Java.
-
-Entradas: main_class_name, parameters, libraries.jar.
-
-Notas: Arranque rápido; muy estable en producción.
-
-14) Spark Submit
-
-Qué hace: Lanza Spark con parámetros de spark-submit.
-
-Cuándo: Flexibilidad máxima (conf flags, jars múltiple, pyfiles…).
-
-Entradas: parameters (tal cual a spark-submit).
-
-Notas: Menos “guardarraíles”; úsalo si JAR/Wheel se te queda corto.
-
-15) Clean Room notebook
-
-Qué hace: Ejecuta un notebook en un Clean Room (data collaboration segura).
-
-Cuándo: Analítica compartida con terceros con controles estrictos.
-
-Entradas: Notebook + políticas del Clean Room.
-
-Notas: Restricciones de salida/logging/joins según políticas.
-
-Dashboards
-16) Legacy dashboard
-
-Qué hace: Refresca un dashboard clásico de Databricks SQL y lo envía a suscriptores.
-
-Cuándo: Sigues usando legacy dashboards.
-
-Entradas: dashboard_id, warehouse_id, subscripciones.
-
-Notas: Considera migrar a dashboards modernos.
-
-17) Power BI
-
-Qué hace: Mantiene datasets/semantic models de Power BI al día.
-
-Cuándo: Orquestar refresh desde Databricks.
-
-Entradas: Conexión/credenciales PBI, dataset/workspace.
-
-Notas: Suele requerir Service Principal y permisos en PBI.
-
-18) Dashboard (moderno)
-
-Qué hace: Refresca un dashboard moderno de Databricks y lo distribuye.
-
-Cuándo: Reporting operativo y distribución a stakeholders.
-
-Entradas: dashboard_id, warehouse_id, schedule y notificaciones.
-
-Notas: Integra bien con alerts y parameters.
+18. **Dashboard (moderno):** Refresca y distribuye un dashboard moderno de Databricks con programación y notificaciones integradas.
