@@ -1,75 +1,182 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import sys, os, io, traceback, logging
-from contextlib import redirect_stdout, redirect_stderr
+1) Notebook
 
-# === Config ruta del log ===
-ts = datetime.now(ZoneInfo("Europe/Madrid")).strftime("%Y%m%d_%H%M%S")
-log_path_local = f"logs/log_{ts}.log"
-os.makedirs("logs", exist_ok=True)
+Qué hace: Ejecuta un notebook de Databricks.
 
-# === Tee para duplicar a consola + fichero ===
-class Tee(io.TextIOBase):
-    def __init__(self, *streams):
-        self.streams = streams
-        self.encoding = getattr(streams[0], "encoding", "utf-8")
-    def write(self, s):
-        for st in self.streams:
-            st.write(s)
-        return len(s)
-    def flush(self):
-        for st in self.streams:
-            try: st.flush()
-            except Exception: pass
-    def isatty(self): return False
-    def writable(self): return True
+Cuándo: Prototipos, pipelines ligeros, orquestación con %run, widgets/params.
 
-with open(log_path_local, "w", buffering=1, encoding="utf-8") as lf:
-    tee_out = Tee(sys.stdout, lf)
-    tee_err = Tee(sys.stderr, lf)
+Entradas: notebook_path, base_parameters (widgets), cluster/warehouse.
 
-    # Enviar logging también al tee
-    logging.basicConfig(
-        level=logging.INFO,
-        handlers=[logging.StreamHandler(tee_out)],
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+Notas: Ideal para pip install in-notebook si no puedes instalar libs a nivel de cluster. Versiona con Repos.
 
-    # Capturar *cualquier* excepción no manejada con traceback completo
-    def excepthook(exctype, value, tb):
-        traceback.print_exception(exctype, value, tb, file=tee_err)
-    sys.excepthook = excepthook
+2) Python script
 
-    # (Opcional) redirigir warnings al logging
-    import warnings
-    def _warn_to_log(message, category, filename, lineno, file=None, line=None):
-        logging.warning(warnings.formatwarning(message, category, filename, lineno, line))
-    warnings.showwarning = _warn_to_log
+Qué hace: Lanza un .py con Spark (spark_python_task).
 
-    # (Opcional) añadir logs de Spark/Java (log4j) al mismo fichero
-    try:
-        log4j = spark._jvm.org.apache.log4j
-        root = log4j.LogManager.getRootLogger()
-        layout = log4j.PatternLayout("%d{ISO8601} %-5p %c: %m%n")
-        appender = log4j.FileAppender(layout, log_path_local, True)
-        appender.setImmediateFlush(True); appender.activateOptions()
-        root.addAppender(appender)
-    except Exception:
-        pass  # si no hay Spark o log4j, lo ignoramos
+Cuándo: Scripts simples empaquetados como archivo suelto.
 
-    # === Ejecutar tu .py con stdout/stderr redirigidos ===
-    globals_for_script = {
-        "spark": spark,           # si no usas Spark, elimina esta línea
-        "arg1": "pruebaArgumento",
-        "arg2": "prueba argumento 2",
-    }
+Entradas: python_file (DBFS/Repo), parameters.
 
-    try:
-        with redirect_stdout(tee_out), redirect_stderr(tee_err):
-            code = open("./test_spark_local.py", encoding="utf-8").read()
-            exec(compile(code, "test_spark_local.py", "exec"), globals_for_script)
-    except Exception:
-        # También cae aquí cualquier excepción dentro del exec
-        traceback.print_exc(file=tee_err)
+Notas: Menos “dev-ex” que wheel; perfecto si no necesitas packaging.
 
-print(f"Salida guardada en {log_path_local}")
+3) SQL query
+
+Qué hace: Ejecuta una query almacenada en SQL (SQL Warehouse).
+
+Cuándo: ETLs/analíticas puras en SQL, sin Spark cluster.
+
+Entradas: query_id, warehouse_id, parámetros de la query.
+
+Notas: Usa Serverless SQL cuando puedas; control de coste y arranque rápido.
+
+4) SQL file
+
+Qué hace: Ejecuta un archivo .sql (DDL/DML) contra un Warehouse.
+
+Cuándo: Migraciones/seed, tareas largas de SQL versionadas en Git.
+
+Entradas: path del fichero, warehouse_id.
+
+Notas: Útil para infra de datos como código (IaC).
+
+5) SQL alert
+
+Qué hace: Evalúa un alert de Databricks SQL y notifica si se cumple la condición.
+
+Cuándo: Monitorizar SLAs, umbrales, calidad de datos.
+
+Entradas: alert_id, warehouse_id.
+
+Notas: Encadena con tareas de remediación vía dependencias.
+
+Ingestion & Transformation
+6) Ingestion pipeline
+
+Qué hace: Orquesta ingesta desde SaaS/DBs a tablas (conectores gestionados).
+
+Cuándo: Captura incremental de orígenes externos y RDBMS.
+
+Entradas: Conexiones/credenciales, mapping a destinos.
+
+Notas: Ideal para CDC y cargas periódicas sin mucho código.
+
+7) ETL Pipeline
+
+Qué hace: Desencadena un pipeline declarativo de transformación (p.ej. DLT).
+
+Cuándo: Curado/orquestación de broncé-silver-gold con calidad.
+
+Entradas: pipeline_id, flags (full refresh, etc.).
+
+Notas: Hereda reglas de calidad y auto-gestiona dependencias.
+
+8) dbt
+
+Qué hace: Ejecuta un proyecto dbt en Databricks.
+
+Cuándo: Modelado SQL con tests, docs y macros dbt.
+
+Entradas: project_directory, commands (ej. dbt run, dbt test), schema, profiles.
+
+Notas: Usa un SQL Warehouse; perfecto para equipos con estándar dbt.
+
+Advanced
+9) Run Job
+
+Qué hace: Lanza otro Job del workspace (fan-out/fan-in).
+
+Cuándo: Reutilizar pipelines ya definidos; composiciones jerárquicas.
+
+Entradas: job_id, job_parameters.
+
+Notas: Controla concurrencia del hijo; ojo a bucles de llamadas.
+
+10) If/else condition
+
+Qué hace: Evalúa una condición y redirecciona el flujo.
+
+Cuándo: Branching por entorno/fecha/resultado de tareas.
+
+Entradas: Expresión/operador y ramas if / else.
+
+Notas: Muy útil para cortes de seguridad y caminos alternativos.
+
+11) For each
+
+Qué hace: Repite una tarea anidada para cada elemento de una lista.
+
+Cuándo: Procesar particiones, clientes, regiones, fechas.
+
+Entradas: Lista (literal, param o salida de otra task), task hija parametrizada.
+
+Notas: Controla paralelismo; limita fan-out para no saturar clúster/WH.
+
+12) Python wheel
+
+Qué hace: Ejecuta un entry point de un paquete Python (.whl).
+
+Cuándo: Producción/CI con packaging, dependencias fijas.
+
+Entradas: libraries.whl, package_name, entry_point, parameters.
+
+Notas: Reproducible; perfecto para MLOps/ETL robusto.
+
+13) JAR
+
+Qué hace: Ejecuta una clase main de un JAR Spark.
+
+Cuándo: Pipelines en Scala/Java.
+
+Entradas: main_class_name, parameters, libraries.jar.
+
+Notas: Arranque rápido; muy estable en producción.
+
+14) Spark Submit
+
+Qué hace: Lanza Spark con parámetros de spark-submit.
+
+Cuándo: Flexibilidad máxima (conf flags, jars múltiple, pyfiles…).
+
+Entradas: parameters (tal cual a spark-submit).
+
+Notas: Menos “guardarraíles”; úsalo si JAR/Wheel se te queda corto.
+
+15) Clean Room notebook
+
+Qué hace: Ejecuta un notebook en un Clean Room (data collaboration segura).
+
+Cuándo: Analítica compartida con terceros con controles estrictos.
+
+Entradas: Notebook + políticas del Clean Room.
+
+Notas: Restricciones de salida/logging/joins según políticas.
+
+Dashboards
+16) Legacy dashboard
+
+Qué hace: Refresca un dashboard clásico de Databricks SQL y lo envía a suscriptores.
+
+Cuándo: Sigues usando legacy dashboards.
+
+Entradas: dashboard_id, warehouse_id, subscripciones.
+
+Notas: Considera migrar a dashboards modernos.
+
+17) Power BI
+
+Qué hace: Mantiene datasets/semantic models de Power BI al día.
+
+Cuándo: Orquestar refresh desde Databricks.
+
+Entradas: Conexión/credenciales PBI, dataset/workspace.
+
+Notas: Suele requerir Service Principal y permisos en PBI.
+
+18) Dashboard (moderno)
+
+Qué hace: Refresca un dashboard moderno de Databricks y lo distribuye.
+
+Cuándo: Reporting operativo y distribución a stakeholders.
+
+Entradas: dashboard_id, warehouse_id, schedule y notificaciones.
+
+Notas: Integra bien con alerts y parameters.
