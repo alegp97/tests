@@ -1,5 +1,10 @@
 ¡Vamos! Desglose **sección a sección** de la configuración de un **Databricks Job** (como en tu captura). Incluyo qué es, por qué importa y trucos prácticos.
 
+
+
+ En Databricks puedes poner thresholds sobre dos tipos de métricas: Run duration, que controla el tiempo total de cada ejecución (útil para detectar jobs que se alargan); y métricas de streaming backlog, que miden la cola pendiente de consumo desde distintos ángulos: bytes (volumen), duration (latencia entre llegada y consumo), files (nº de ficheros sin procesar) y records (nº de eventos pendientes). Define umbrales con histórico (p. ej., P95) y notifica solo a quien corresponda; combinar volumen (bytes/records) con latencia (duration) suele dar la alerta más útil.
+
+
 # Job details
 
 * **Job ID:** Identificador único e inmutable del job. Útil para logs, API y auditoría. Guárdalo cuando integres con CI/CD o tickets.
