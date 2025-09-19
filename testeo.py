@@ -1,42 +1,99 @@
-LOGGER.info("[ERESEARCH] - Entra convertExcelToJSON.else");
-        String processedFile = inputFile + "_processed_" + Calendar.getInstance().getTimeInMillis();
+%scala
+import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
+import java.io.BufferedInputStream
+import org.apache.poi.ss.usermodel.{Workbook, WorkbookFactory}
 
-        LOGGER.info("Intentando abrir el archivo: " + excelPath);
+def getFS(): FileSystem = FileSystem.get(spark.sparkContext.hadoopConfiguration)
 
-        // --- CLAVE: abrir y ENVOLVER el stream ---
-        try (FSDataInputStream raw = fs.open(excelPath);
-             BufferedInputStream bin = new BufferedInputStream(raw)) {
 
-            // (Opcional) “sondeo” mínimo de lectura, ahora SÍ con mark/reset sobre el buffer:
-            bin.mark(8192);
-            int firstByte = bin.read();
-            if (firstByte == -1) {
-                LOGGER.error("El stream está vacío: " + excelPath);
-                throw new IOException("Stream vacío: " + excelPath);
-            } else {
-                LOGGER.info("El stream NO está vacío: " + excelPath);
-                bin.reset();
-            }
+%scala
+def openWorkbookBuffered(fs: FileSystem, path: Path): Workbook = {
+  val raw: FSDataInputStream = fs.open(path)
+  // usamos try-with-resources “a mano”: cerramos el Workbook en quien lo consuma
+  val bin = new BufferedInputStream(raw)
+  // si quieres, “marca” amplio para poder hacer resets locales si lees algo antes
+  bin.mark(8192)
+  val wb = WorkbookFactory.create(bin) // POI puede “asomar” y volver sin problemas
+  // OJO: no cierres aquí bin/raw; se cierran cuando cierres wb (POI no cierra los streams)
+  wb
+}
 
-            // (Opcional) leer unos bytes para comprobar acceso (sobre el buffer)
-            byte[] buffer = new byte[4];
-            int bytesRead = bin.read(buffer);
-            if (bytesRead <= 0) {
-                throw new IOException("No se pudo leer del archivo: " + excelPath);
-            }
-            LOGGER.info("Archivo abierto y leído correctamente, bytes leídos: " + bytesRead);
+val fs = getFS()
+val inPathStr = "dbfs:/FileStore/contactos.xlsx"   // ajusta tu ruta
+val inPath    = new Path(inPathStr)
 
-            // Volver al inicio antes de POI (porque hicimos lecturas)
-            bin.reset(); // válido porque marcamos con 8192 antes
+require(fs.exists(inPath), s"No existe: $inPathStr")
 
-            LOGGER.info("[ERESEARCH] - Entra convertExcelToJSON.create");
+val wb = openWorkbookBuffered(fs, inPath)
+println(s"Hojas detectadas: ${(0 until wb.getNumberOfSheets).map(i => wb.getSheetName(i)).mkString(", ")}")
+wb.close()
 
-            // Crear el Workbook desde el stream EN VUELTO
-            try (Workbook wb = WorkbookFactory.create(bin)) {
-                LOGGER.info("Workbook creado correctamente");
-                MailsInfo config = obtainJsonConfig(wb);
-                writeJsonConfig(outputFile, config);
-            }
-        }
 
-        copyFile(inputFile, processedFile, true);
+
+
+%scala
+import java.io.{BufferedInputStream, InputStream}
+import org.apache.poi.ss.usermodel.{Workbook, WorkbookFactory}
+
+case class MailEntry(key: String, value: String) // ejemplo; cambia por tu MailsInfo
+
+def obtainJsonConfigDemo(wb: Workbook): Seq[MailEntry] = {
+  // DEMO: lee la primera fila como cabecera y la segunda como valores
+  val sheet = wb.getSheetAt(0)
+  val header = sheet.getRow(0)
+  val row1   = sheet.getRow(1)
+  if (header == null || row1 == null) return Seq.empty
+
+  val cells = header.getLastCellNum.toInt
+  (0 until cells).flatMap { i =>
+    val k = Option(header.getCell(i)).map(_.toString).getOrElse(s"col_$i")
+    val v = Option(row1.getCell(i)).map(_.toString).getOrElse("")
+    Some(MailEntry(k, v))
+  }
+}
+
+def writeJsonConfigDemo(outputFile: String, entries: Seq[MailEntry]): Unit = {
+  import spark.implicits._
+  val df = entries.toDF
+  df.coalesce(1).write.mode("overwrite").json(outputFile)  // escribe JSON en DBFS/HDFS
+}
+
+def convertExcelToJSONBuffered(inputFile: String, outputFile: String): Unit = {
+  val fs   = getFS()
+  val inP  = new Path(inputFile)
+  require(fs.exists(inP), s"Input no existe: $inputFile")
+
+  // abrir con buffer
+  val raw = fs.open(inP)
+  val bin = new BufferedInputStream(raw)
+  bin.mark(1 << 14) // 16 KiB por si lees antes que POI
+
+  // crear workbook
+  val wb = WorkbookFactory.create(bin)
+  try {
+    // === aquí conectarías tus funciones reales ===
+    val config = obtainJsonConfigDemo(wb)            // <- reemplaza por obtainJsonConfig(wb)
+    writeJsonConfigDemo(outputFile, config)          // <- reemplaza por writeJsonConfig(...)
+  } finally {
+    wb.close()     // esto cierra internamente, y liberamos buffers
+    bin.close()
+    raw.close()
+  }
+}
+
+
+
+
+
+%scala
+val input  = "dbfs:/FileStore/contactos.xlsx"                 // tu Excel
+val output = "dbfs:/FileStore/emailconf/contactos_json_out"   // carpeta de salida JSON
+
+convertExcelToJSONBuffered(input, output)
+display(spark.read.json(output))
+
+
+
+
+
+
