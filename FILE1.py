@@ -1,7 +1,9 @@
-From/To: etapas (ingesta → validación → siguiente).
+gscp1weudbrsuptlccrit101 → Prod (gscp); región West Europe; instancia 101.
 
-Action: tipo (SparkLauncher, ExecFromFile, CheckHDFS, etc.).
+gsci1weudbrsuptlccrit100 → Pre/Integración (gsci); WEU; instancia 100.
 
-args: clase, jars, main, params (tabla, paths, particiones).
+gsci1weudbrsuptlccrit101 → Pre/Integración; WEU; instancia 101.
 
-Esto te da el “qué y dónde” exacto.
+gscp1weudbrstresscrit103 → Entorno de estrés/performance (no-prod, “prod-like”); WEU; instancia 103.
+
+gscp1weudbrsuptlccrit100 → Prod; WEU; instancia 100.
