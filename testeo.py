@@ -1,5 +1,13 @@
-dbutils.widgets.text("param1", "")
-dbutils.widgets.text("param2", "")
+Run duration: duración esperada del run (batch o streaming).
 
-p1 = dbutils.widgets.get("param1")
-p2 = dbutils.widgets.get("param2")
+Streaming metrics (para tareas con Structured Streaming):
+
+Streaming backlog (bytes): bytes pendientes sin consumir en todos los streams.
+
+Streaming backlog (duration): retraso temporal acumulado de datos no consumidos.
+
+Streaming backlog (files): número de ficheros pendientes.
+
+Streaming backlog (records): offset lag total en registros.
+
+Streaming commit delay: retraso medio/máximo al confirmar los commits del stream.
