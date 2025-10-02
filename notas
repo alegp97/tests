@@ -1,6 +1,83 @@
+0) Accesos previos (una vez)
 
-El **punto 6 no es necesario** para que la migración funcione. Es solo un **pack de comandos de ejemplo** (plantillas) para casos típicos.
+Tener shell en el nodo frontera (NF).
 
-* **Lo mínimo obligatorio:** pasos **1→5** (preparar proxy, definir JSON, lanzar `launcher.sh`, revisar salida, y si procede `launcher_repair.sh`).
-* **Cuándo usar el 6:** si quieres **probar rápido**, **reproducir incidencias** (tabla ya creada / inexistente) o **hacer demos** sin escribir cada JSON desde cero.
-* **Puedes omitirlo** sin problema en ejecución real.
+Que te hayan dado lectura al metastore Hive on-prem para los schemas que migras.
+
+Que tu usuario pueda usar el proxy corporativo para curl hacia Databricks.
+
+Que exista el repo con los scripts (ruta tipo /initiatives_share/migracion_supra/...).
+
+1) Preparar la sesión en el NF (cada vez que abras terminal)
+# 1.1 Proxy para llamadas a API
+export https_proxy=http://proxyapps.gsnet.corp:80
+export http_proxy=http://proxyapps.gsnet.corp:80
+export no_proxy="127.0.0.1,.corp"
+
+# 1.2 Carpeta de trabajo local (artefactos caen en tu $HOME igualmente)
+mkdir -p ~/migracion_ddls && cd ~/migracion_ddls
+
+2) Definir tu petición (qué migras)
+
+Crea un JSON (ej. peticion.json) con tus casos:
+
+[
+  {
+    "user":   "user_impersonado",
+    "schema": "mi_bbdd",
+    "tables": ["tabla1","tabla2"],   // o [] para TODAS
+    "entity": "corp",                // SOLO si es landing; si no, ""
+    "repair": true                   // true: crea y repara; false: solo crea
+  }
+]
+
+
+Notas rápidas:
+
+tables: [] ⇒ migra todas las tablas del schema.
+
+repair: false ⇒ si ya existe una tabla, fallará con ALREADY_EXISTS (útil para detectar duplicados) y te moverá los repairs a ddl_tablas_repair_pending/.
+
+3) Lanzar el proceso end-to-end desde el NF
+
+(extracción Hive → parseo → ejecución vía Databricks SQL Warehouse)
+
+sh /initiatives_share/migracion_supra/apps/ddlmigration/app/bin/launcher.sh \
+   "$(cat peticion.json)"
+
+4) Verificar resultado (en tu $HOME)
+
+Mira el último timestamp creado:
+
+BASE=~/ddl_tablas/ddl_tablas_historic
+ls -1t "$BASE" | head -n 1
+ts="<<pega_aqui_el_timestamp>>"
+
+# 4.1 Estados por objeto
+ls "$BASE/$ts/sql_status_response" | sed 's/.json$//'
+# Ver un caso
+cat "$BASE/$ts/sql_status_response/mi_tabla_SUCCEEDED.json" | head -n 50
+
+# 4.2 Si desactivaste repair (o hubo fallos de creación), revisa pendientes
+ls -1t ~/ddl_tablas/ddl_tablas_repair_pending/ | head -n 3
+
+5) Ejecutar solo los REPAIR (si los dejaste pendientes)
+# Script específico de repair (misma app)
+sh /initiatives_share/migracion_supra/apps/ddlmigration/app/bin/launcher_repair.sh
+# Verifica:
+ls "$BASE"/*_repair | tail -n 1
+
+
+
+
+El punto 6 no es necesario para que la migración funcione. Es solo un pack de comandos de ejemplo (plantillas) para casos típicos.
+
+Lo mínimo obligatorio: pasos 1→5 (preparar proxy, definir JSON, lanzar launcher.sh, revisar salida, y si procede launcher_repair.sh).
+
+Cuándo usar el 6: si quieres probar rápido, reproducir incidencias (tabla ya creada / inexistente) o hacer demos sin escribir cada JSON desde cero.
+
+Puedes omitirlo sin problema en ejecución real.
+
+
+
+
