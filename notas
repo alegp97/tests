@@ -1,0 +1,6 @@
+
+El **punto 6 no es necesario** para que la migración funcione. Es solo un **pack de comandos de ejemplo** (plantillas) para casos típicos.
+
+* **Lo mínimo obligatorio:** pasos **1→5** (preparar proxy, definir JSON, lanzar `launcher.sh`, revisar salida, y si procede `launcher_repair.sh`).
+* **Cuándo usar el 6:** si quieres **probar rápido**, **reproducir incidencias** (tabla ya creada / inexistente) o **hacer demos** sin escribir cada JSON desde cero.
+* **Puedes omitirlo** sin problema en ejecución real.
