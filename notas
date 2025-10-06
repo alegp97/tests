@@ -81,3 +81,140 @@ Puedes omitirlo sin problema en ejecución real.
 
 
 
+
+
+1. Introducción
+
+1.1 Objetivos
+Estandarizar trabajo en Databricks, acelerar onboarding y reducir riesgos.
+
+1.2 Alcance y exclusiones
+Qué entra (Jobs, DLT, UC, Delta, CI/CD) y qué queda fuera.
+
+1.3 Audiencia técnica
+Perfiles destinatarios: DE/DA/ML/Operaciones/Seguridad.
+
+1.4 Beneficios y arquitectura de alto nivel
+Visión E2E: Repos → Ingesta → Bronze/Silver/Gold → Consumo; UC y observabilidad.
+
+2. Guía de usuario técnico
+
+2.1 Cómo se trabaja con esta tecnología
+Método de trabajo: repos, parametrización por entorno, capas Delta y DoD.
+
+2.1.1 Ciclo de vida y repos (Repos/Git) — Branching/PRs, estructura y buenas prácticas.
+
+2.1.2 Capas de datos (bronze–silver–gold) — Propósito, contratos y trazabilidad.
+
+2.1.3 Parámetros, secrets y configuración por entorno — Widgets, conf y Secret Scopes.
+
+2.1.4 Pruebas, observabilidad y control de costes — Qué testear, medir y cómo contener costes.
+
+2.2 Programación de Jobs en Databricks
+Crear y ejecutar pipelines con tareas y dependencias.
+
+2.2.1 Creación del Job y configuración global — Permisos, schedule, retries, timeouts, alerts.
+
+2.2.2 Tipos de task: Notebook / Python / SQL / DLT / dbt / MLflow — Cuándo usar cada uno.
+
+2.2.3 Dependencias, schedules, parámetros y alerts — DAG, paso de parámetros y triggers.
+
+2.2.4 Run permissions, retries, timeouts y notificaciones — Control de ejecución y resiliencia.
+
+2.3 Conexión y uso de repositorio GitHub
+Integrar Repos con GitHub y trabajar con PRs.
+
+2.3.1 Autenticación (OAuth/PAT) y permisos — Opciones de login y seguridad.
+
+2.3.2 Trabajo con Repos y Git-flow (branching, PRs) — Flujo estándar de cambios y revisión.
+
+2.3.3 Notebooks vs paquetes (wheels) y versionado — Cuándo empaquetar y fijar dependencias.
+
+2.4 Subir datos e información al entorno
+Formas soportadas y recomendadas de carga.
+
+2.4.1 Databricks CLI (local y nodo analítico) — Instalación, perfiles y comandos fs/workspace.
+
+2.4.2 Unity Catalog: Volumes y External Locations — Ubicaciones gobernadas para ficheros/tablas.
+
+2.4.3 Ingesta con Auto Loader / COPY INTO / fs cp — Patrones batch/stream.
+
+2.4.4 Creación de tablas Delta y particionamiento — MERGE, time travel y mantenimiento.
+
+2.4.5 Gestión de secrets y parámetros — Credenciales en Jobs/Notebooks.
+
+2.5 Compute: Clusters y Warehouses
+Elección y configuración del cómputo.
+
+2.5.1 Policies, autoscaling, pools y serverless — Gobernanza y ahorro de coste.
+
+2.5.2 SQL Warehouses y SQL Editor (queries, dashboards) — SQL puro, programación y alertas.
+
+2.6 Gobierno y seguridad (Unity Catalog)
+Catálogo único, permisos y auditoría.
+
+2.6.1 Catálogos, esquemas, grants, ownership — Namespaces y control de acceso.
+
+2.6.2 RLS/CLS, masking, auditoría y lineage — Seguridad fina y trazabilidad.
+
+2.6.3 Data Sharing y acceso entre dominios — Compartir datos de forma gobernada.
+
+2.7 Delta Lake y mantenimiento
+Operaciones de rendimiento y salud.
+
+2.7.1 Time Travel, OPTIMIZE/Z-ORDER, VACUUM — Compacción y limpieza segura.
+
+2.7.2 Esquema y evolución controlada — Estrategias de schema evolution.*
+
+2.8 Ingesta y transformación
+Construcción de pipelines batch/stream.
+
+2.8.1 Spark SQL/PySpark: patrones comunes — Joins, particionado, idempotencia, checkpointing.
+
+2.8.2 Delta Live Tables: expectations y auto-healing — Calidad declarativa y orquestación administrada.
+
+2.8.3 Streaming (Structured Streaming) — Flujos continuos y manejo de estados.
+
+2.9 Librerías y dependencias
+Cómo instalar y fijar versiones.
+
+2.9.1 Libraries en cluster vs %pip en notebook — Ventajas, riesgos y usos.
+
+2.9.2 Wheels, requirements.txt, init scripts y mirrors — Distribución interna y pinning.
+
+2.10 Observabilidad y costes
+Métricas de ejecución y FinOps.
+
+2.10.1 Logs, métricas, alerts y trazas de ejecución — Qué registrar y cómo alertar.
+
+2.10.2 Cost management y FinOps en Databricks — Etiquetado, presupuestos y right-sizing.*
+
+2.11 CI/CD y automatización
+Entrega continua y despliegue repetible.
+
+2.11.1 Pipelines (build/test/deploy) y quality gates — Sonar/coverage y promoción de entornos.
+
+2.11.2 Infra as Code: Terraform y Policies — Recursos DBX como código y políticas de clúster.
+
+2.11.3 REST API, SDKs y Databricks CLI — Automatizaciones y utilidades de operación.
+
+2.12 Troubleshooting y FAQs
+Errores comunes, diagnósticos rápidos y soluciones conocidas.
+
+3. Anexos
+
+A. Estándares de naming y particionamiento — Reglas de nombres, tags y particiones.
+
+B. Plantillas JSON de Jobs/DLT y ejemplos de parámetros — Snippets listos para reutilizar.
+
+C. Glosario y acrónimos — Términos y abreviaturas usadas.
+
+D. Referencias útiles — Enlaces a guías internas y de Databricks.
+
+
+
+
+
+
+
+
