@@ -1,0 +1,48 @@
+# PyPI
+databricks libraries install --cluster-id <CLUSTER_ID> \
+  --pypi-package "great-expectations==0.18.8"
+
+# Maven (Scala/Java)
+databricks libraries install --cluster-id <CLUSTER_ID> \
+  --maven-coordinates "org.jsoup:jsoup:1.17.2"
+
+# JAR/WHEEL/EGG desde DBFS o Volumes
+databricks libraries install --cluster-id <CLUSTER_ID> \
+  --jar dbfs:/FileStore/jars/mi-lib.jar
+
+databricks libraries install --cluster-id <CLUSTER_ID> \
+  --whl dbfs:/FileStore/wheels/mi_paquete-0.1.0-py3-none-any.whl
+
+
+databricks libraries cluster-status --cluster-id <CLUSTER_ID>
+databricks libraries list --cluster-id <CLUSTER_ID>
+databricks libraries uninstall --cluster-id <CLUSTER_ID> --pypi-package "great-expectations"
+
+
+
+
+
+
+
+  | Tarea                        | Comando                                                                  | Ejemplo                                                                                                       | Nota útil                               |                                   |
+| ---------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------- |
+| Ver versión                  | `databricks --version`                                                   | `databricks --version`                                                                                        | Comprueba que usas la v1 (recomendada). |                                   |
+| Iniciar sesión (perfil)      | `databricks auth login --profile <perfil> --host https://<workspace>`    | `databricks auth login --profile santander --host https://adb-12345.6.azuredatabricks.net`                    | Usa token del workspace.                |                                   |
+| Listar perfiles              | `databricks auth profiles`                                               | `databricks auth profiles`                                                                                    | Ver perfiles guardados.                 |                                   |
+| ¿Quién soy?                  | `databricks auth whoami --profile <perfil>`                              | `databricks auth whoami --profile santander`                                                                  | Valida credenciales.                    |                                   |
+| Listar clusters (Compute)    | `databricks clusters list --profile <perfil>`                            | `databricks clusters list`                                                                                    | “All-purpose compute”.                  |                                   |
+| Arrancar/parar cluster       | `databricks clusters start                                               | stop --cluster-id <id>`                                                                                       | `databricks clusters start 0123-ABCD`   | El ID aparece en `clusters list`. |
+| Listar Jobs                  | `databricks jobs list`                                                   | `databricks jobs list`                                                                                        | Ids y nombres de Workflows.             |                                   |
+| Lanzar un Job                | `databricks jobs run-now --job-id <id>`                                  | `databricks jobs run-now --job-id 1234`                                                                       | Devuelve el `run-id`.                   |                                   |
+| Ver estado de un run         | `databricks runs get --run-id <run>`                                     | `databricks runs get --run-id 5678`                                                                           | Útil para CI/CD.                        |                                   |
+| Exportar salida run          | `databricks runs get-output --run-id <run>`                              | `databricks runs get-output --run-id 5678`                                                                    | Captura logs/resultados.                |                                   |
+| Databricks FS (DBFS/Volumes) | `databricks fs ls <ruta>`                                                | `databricks fs ls dbfs:/`                                                                                     | También `cp`, `mv`, `mkdirs`, `rm -r`.  |                                   |
+| Workspace (notebooks/dirs)   | `databricks workspace ls <ruta>`                                         | `databricks workspace ls /Shared`                                                                             | `import/export` para mover notebooks.   |                                   |
+| Repos (Git)                  | `databricks repos list`                                                  | `databricks repos update --path /Repos/credit --branch main`                                                  | Vincula carpetas a Git.                 |                                   |
+| SQL Warehouses               | `databricks sql warehouses list`                                         | `databricks sql warehouses list`                                                                              | Ver/gestionar endpoints SQL.            |                                   |
+| Unity Catalog: catálogos     | `databricks catalogs list`                                               | `databricks catalogs list`                                                                                    | Requiere permisos UC.                   |                                   |
+| Unity Catalog: esquemas      | `databricks schemas list --catalog <cat>`                                | `databricks schemas list --catalog santander_credit`                                                          | Navega dominios.                        |                                   |
+| Unity Catalog: tablas        | `databricks tables list --catalog <cat> --schema <sch>`                  | `databricks tables list --catalog santander_credit --schema gold_risk`                                        | Inventario rápido.                      |                                   |
+| Permisos UC                  | `databricks permissions get --object-type table --object-id <full_name>` | `databricks permissions get --object-type table --object-id santander_credit.gold_risk.kpi_credit_risk_daily` | Auditoría de ACLs.                      |                                   |
+| Secrets (scopes)             | `databricks secrets list-scopes`                                         | `databricks secrets list-scopes`                                                                              | **No** muestra valores, solo metadatos. |                                   |
+| DLT Pipelines                | `databricks pipelines list`                                              | `databricks pipelines start --pipeline-id <id>`                                                               | Gestiona Delta Live Tables.             |                                   |
