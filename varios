@@ -1,22 +1,4 @@
-# PyPI
-databricks libraries install --cluster-id <CLUSTER_ID> \
-  --pypi-package "great-expectations==0.18.8"
-
-# Maven (Scala/Java)
-databricks libraries install --cluster-id <CLUSTER_ID> \
-  --maven-coordinates "org.jsoup:jsoup:1.17.2"
-
-# JAR/WHEEL/EGG desde DBFS o Volumes
-databricks libraries install --cluster-id <CLUSTER_ID> \
-  --jar dbfs:/FileStore/jars/mi-lib.jar
-
-databricks libraries install --cluster-id <CLUSTER_ID> \
-  --whl dbfs:/FileStore/wheels/mi_paquete-0.1.0-py3-none-any.whl
-
-
-databricks libraries cluster-status --cluster-id <CLUSTER_ID>
-databricks libraries list --cluster-id <CLUSTER_ID>
-databricks libraries uninstall --cluster-id <CLUSTER_ID> --pypi-package "great-expectations"
+Usamos el formato MAJOR.MINOR.PATCH. Piensa así: el MAJOR cambia cuando rompes lo anterior (algo deja de funcionar como antes: “de 1.x a 2.0.0”). El MINOR sube cuando añades cosas nuevas sin romper nada (todo lo viejo sigue funcionando: “1.4 → 1.5”). El PATCH es para arreglos pequeños o pulidos que no cambian cómo se usa (“1.5.0 → 1.5.1”). Ejemplos: 2.0.0 = gran cambio; 1.6.0 = nuevas funciones compatibles; 1.6.3 = corrección menor.
 
 
 
