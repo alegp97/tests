@@ -1,6 +1,4 @@
-Usamos el formato MAJOR.MINOR.PATCH. Piensa así: el MAJOR cambia cuando rompes lo anterior (algo deja de funcionar como antes: “de 1.x a 2.0.0”). El MINOR sube cuando añades cosas nuevas sin romper nada (todo lo viejo sigue funcionando: “1.4 → 1.5”). El PATCH es para arreglos pequeños o pulidos que no cambian cómo se usa (“1.5.0 → 1.5.1”). Ejemplos: 2.0.0 = gran cambio; 1.6.0 = nuevas funciones compatibles; 1.6.3 = corrección menor.
-
-
+Un SQL Warehouse en Databricks es un endpoint de cómputo optimizado exclusivamente para ejecutar SQL con alta concurrencia y baja latencia, ideal para BI y dashboards. Ofrece autoscaling, arranque/parada automática y cachés (incluido Photon) para acelerar consultas. Se consume desde Databricks SQL, JDBC/ODBC y herramientas como Power BI o Tableau. Respeta permisos y linaje bajo Unity Catalog y políticas de acceso. Existen modos Serverless (infra totalmente gestionada) y Pro/Classic (más control de red/seguridad).
 
 
 
