@@ -1,4 +1,88 @@
-Un SQL Warehouse en Databricks es un endpoint de cómputo optimizado exclusivamente para ejecutar SQL con alta concurrencia y baja latencia, ideal para BI y dashboards. Ofrece autoscaling, arranque/parada automática y cachés (incluido Photon) para acelerar consultas. Se consume desde Databricks SQL, JDBC/ODBC y herramientas como Power BI o Tableau. Respeta permisos y linaje bajo Unity Catalog y políticas de acceso. Existen modos Serverless (infra totalmente gestionada) y Pro/Classic (más control de red/seguridad).
+A) Subir archivos a DBFS con la CLI (rápido y sencillo)
+
+# 1) Crear carpeta destino en DBFS
+databricks fs mkdirs dbfs:/landing/tmp
+
+# 2) Subir un fichero suelto
+databricks fs cp ./data/credit_2025_10.csv dbfs:/landing/tmp/ --overwrite
+
+# 3) Subir una carpeta completa (recursivo)
+databricks fs cp --recursive ./data/batch_2025_10/ dbfs:/landing/tmp/ --overwrite
+
+# 4) Verificar lo subido
+databricks fs ls dbfs:/landing/tmp
+
+Mover desde DBFS a tu Volumen (si preferís trabajar en /Volumes/...):
+
+Mediante un notebook que ejecute dbutils.fs.cp("dbfs:/landing/tmp/", "/Volumes/<catalog>/<schema>/<volume>/raw/", True) y lánzalo desde la CLI:
+
+
+databricks runs submit --json '{
+  "run_name": "copy_dbfs_to_volume",
+  "task": {
+    "notebook_task": {"notebook_path": "/Shared/copy_dbfs_to_volume"},
+    "existing_cluster_id": "<CLUSTER_ID>"
+  }
+}'
+
+
+B) Subir directo a la zona gobernada (recomendado en prod)
+
+En Databricks con Unity Catalog, lo ideal es cargar a:
+
+un Volume (/Volumes/<catalog>/<schema>/<volume>/...) o
+
+una External Location (ADLS/S3/GCS) protegida.
+
+La subida no se hace con la CLI de Databricks, sino con la CLI del cloud (Azure/AWS/GCP), porque el almacenamiento es nativo del cloud:
+
+Azure ADLS Gen2 (ejemplo):
+
+# Con SAS o identidad federada (AAD)
+azcopy copy "./data/batch_2025_10/*" \
+  "https://<account>.dfs.core.windows.net/<container>/credit/landing/batch_2025_10?<SAS>" \
+  --recursive
+
+
+Después, en Databricks, apuntas tu Auto Loader / lectura Delta a abfss://<container>@<account>.dfs.core.windows.net/credit/landing/...
+
+Disparar la ingesta (Auto Loader / Job) desde la CLI
+
+Una vez están los ficheros en el path de landing (DBFS o ADLS), lanza el pipeline:
+
+Ejecutar un Job existente (Workflows):
+
+databricks jobs run-now --job-id <JOB_ID>
+
+
+Run ad-hoc de un notebook de ingesta (Auto Loader):
+
+databricks runs submit --json '{
+  "run_name": "ingest_credit_landing",
+  "task": {
+    "notebook_task": {
+      "notebook_path": "/Repos/credit/ingestion/bronze_autoloader",
+      "base_parameters": {
+        "input_path": "abfss://<container>@<account>.dfs.core.windows.net/credit/landing/",
+        "output_table": "santander_credit.bronze_core.cards_tx_raw"
+      }
+    },
+    "existing_cluster_id": "<CLUSTER_ID>"
+  }
+}'
+
+Comprobaciones útiles (CLI)
+# Listar archivos
+databricks fs ls dbfs:/landing/tmp
+
+# Ver runs y su estado
+databricks runs get --run-id <RUN_ID>
+databricks runs get-output --run-id <RUN_ID>
+
+# Ver tablas creadas en UC (por ejemplo la Bronze)
+databricks tables list --catalog santander_credit --schema bronze_core
+
+
 
 
 
