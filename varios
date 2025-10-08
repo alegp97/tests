@@ -1,5 +1,9 @@
-Job = el orquestador/planificador. Puede tener 1 o varias tasks en un DAG.
+Para tu contexto de riesgo de crédito
 
-Task = cada paso (notebook, .py, SQL, JAR, DLT pipeline, dbt, run job, etc.).
+Ingesta (landing→bronze) notebook/script → Task
 
-Pipeline (en Databricks suele querer decir Delta Live Tables – DLT) = flujo declarativo de tablas/vistas y reglas de calidad. No es una secuencia de jobs; puede ejecutarse como una task dentro de un Job.
+Normalización/reglas/CDC (silver→gold) en DLT Pipeline → Task
+
+Cálculos de métricas/alerts SQL Warehouse → Task
+
+(Opcional) disparar otro job de stress test con Run job → Task
