@@ -1,7 +1,1 @@
-Borrar el fichero/carpeta de origen en DBFS (si el origen está en DBFS y no es tu máquina local)
-
-Para un fichero:
-databricks fs rm dbfs:/path/origen/<fichero>
-
-Para una carpeta (recursivo):
-databricks fs rm --recursive dbfs:/path/origen/<carpeta>
+Genie (AI/BI Genie) es la interfaz conversacional de Databricks SQL: haces preguntas en lenguaje natural (“¿cómo evoluciona la morosidad hipotecas vs. consumo?”) y te devuelve tablas, gráficos y el SQL generado sobre tus datos gobernados en Unity Catalog. Funciona dentro de un Genie space que curamos (qué tablas/vistas usar, ejemplos de SQL e instrucciones) y puede apoyarse en un Knowledge Store para entender vocabulario y joins de negocio.
