@@ -1,1 +1,63 @@
-En Compute, aunque hoy no usamos estas piezas en nuestro día a día, conviene que las ubiquemos para cuando aporten valor: los Pools (Instance Pools) son reservas de máquinas “precalentadas” que nos acelerarían el arranque de clústeres y estabilizarían el autoscaling en ventanas críticas (p. ej., stress test nocturnos); su coste viene de las instancias idle, así que, si los activamos, los crearíamos por entorno, con min_idle bajo y etiquetas de coste. La pestaña Apps solo expone UIs auxiliares (p. ej., herramientas servidas por el driver) y, aunque ahora la mantenemos desactivada salvo pruebas puntuales, en el futuro podríamos habilitarla con aprobación y control de accesos para diagnóstico específico. Por último, lo que solemos llamar “lakebase” Postgres es Lakehouse Federation: consultar Postgres en read-only desde Databricks sin mover datos, registrando la BD vía Unity Catalog (CREATE CONNECTION + CREATE FOREIGN CATALOG); hoy no lo usamos, pero sería útil para lookups/validaciones rápidas sin ETL, teniendo presente que la ejecución ocurre en Postgres (no para cargas pesadas) y que gestionaríamos credenciales con secrets y permisos UC.
+Barra superior del editor
+
+Pestaña con nombre del query (“show creates bu_stresstest”): abre/cierra la pestaña actual.
+
++ (Nueva pestaña): crea un nuevo editor SQL.
+
+Run all (1000) ▶️: ejecuta el SQL. El número es el límite de filas devueltas (desplegable para cambiarlo).
+
+Tick verde + tiempo: estado/latencia de la última ejecución.
+
+hive_metastore · st_stresstest (desplegables): Catálogo y Esquema activos para resolver tablas.
+
+New SQL editor: ON (desplegable): alterna/ajustes del nuevo editor vs. clásico.
+
+⭐ (Favorito): marca este query como favorito.
+
+“Last edit was …”: historial rápido y punto de guardado.
+
+⋮ (More): menú contextual del editor (renombrar, duplicar, abrir como, etc.).
+
+✨ Edit (varita “AI/assist” junto a “Edit”): herramientas de edición/ayuda inteligente del editor.
+
+🟢 consumo_metastore (desplegable): SQL Warehouse seleccionado; punto verde = activo. El “L” indica el modo/ tamaño del warehouse (por ejemplo “Small/Medium/Large”) según tu configuración.
+
+Schedule: programa este SQL como job con una frecuencia.
+
+Share: comparte el objeto (permisos/enlace).
+
+Save: guarda cambios en el query.
+
+⧉ Split/undock (doble rectángulo a la derecha): cambia el layout (acoplar/desacoplar panel).
+
+Área de parámetros (sobre los resultados)
+
+Add parameter: añade parámetros al query (:param) para reusarlo con distintos valores.
+
+Conmutador de visualización de resultados
+
+Table ▾: tipo de visualización. Por defecto tabla; desde aquí puedes cambiar a Chart o crear más vistas.
+
++ junto a “Table”: añadir nueva visualización (otra tabla, otro gráfico, etc.).
+
+Barra de herramientas del resultado (derecha, sobre la tabla)
+
+🔎 Buscar: busca texto dentro de los resultados renderizados.
+
+🧯 Filtro (embudo): añade filtros de columna en la tabla de resultados, sin re-ejecutar el SQL.
+
+☰ Columnas (tres barras): mostrar/ocultar columnas y ordenar su posición en la tabla.
+
+▭ Vista expandida (cuadrado): maximiza/expande la visualización (modo más cómodo para inspección).
+
+🥞 Exportar/Descargar (cilindros apilados): exporta los resultados (CSV/JSON/Excel; depende del plan/entorno).
+
+ˆ Colapsar: pliega el panel de resultados.
+
+✖ Cerrar salida: limpia o cierra la vista de resultados actual.
+
+Pie del resultado (abajo a la izquierda)
+
+⤓ Descarga rápida ▾: descarga esta tabla de resultados (atajo del export).
+
+“10 rows | 0.25s runtime”: métricas de la última ejecución (filas devueltas y tiempo).
