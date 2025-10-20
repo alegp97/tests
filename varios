@@ -1,29 +1,19 @@
-Barra lateral (navegación principal)
-
-Workspace: notebooks, repos (Git), carpetas del equipo y utilidades (DBFS, libraries). Es “tu proyecto”.
-
-Catalog (Unity Catalog): catálogos → esquemas → tablas/vistas → funciones. Permisos y gobernanza de datos.
-
-Data / Ingest: asistentes y conectores para explorar fuentes y cargar datos en el Lakehouse.
-
-Compute: clusters, pools y (según edición) apps/lakehouse postgres. Donde definimos los recursos de ejecución de Spark/SQL/ML.
-
-Workflows (Jobs & Pipelines): orquestación de tareas (notebooks, scripts, SQL, dbt). Schedules, dependencias y alertas.
-
-SQL: editor SQL, Warehouses (serving compute), dashboards, alertas y query history.
-
-Model Serving / Experiments (si aplica): despliegue de endpoints y seguimiento de modelos/experimentos.
-
-Marketplace / Partner Integrations (si aplica): datasets y soluciones externas.
-
-Zona superior (top bar)
-
-Search (global): busca notebooks, tablas, trabajos y usuarios.
-
-Contexto (workspace/catálogo actual): cambia entre espacios de trabajo y catálogos.
-
-Ayuda & Docs: accesos rápidos a documentación y soporte.
-
-Usuario/Perfil: ajustes personales, tokens, billing (según permisos).
-
-Lienzo central (contenido)
+SELECT count(*) FROM bu_stresstest.audit_table;
+SELECT count(*) FROM bu_stresstest.data_credit_bu;
+SELECT count(*) FROM bu_stresstest.data_credit_ldp;
+SELECT count(*) FROM bu_stresstest.data_input;
+SELECT count(*) FROM bu_stresstest.data_output;
+SELECT count(*) FROM bu_stresstest.data_output_hist;
+SELECT count(*) FROM bu_stresstest.execution_def;
+SELECT count(*) FROM bu_stresstest.execution_def_input;
+SELECT count(*) FROM bu_stresstest.execution_def_output;
+SELECT count(*) FROM bu_stresstest.exercise_inventory;
+SELECT count(*) FROM bu_stresstest.granularities_map;
+SELECT count(*) FROM bu_stresstest.mev_scenario_data;
+SELECT count(*) FROM bu_stresstest.mevs_labels;
+SELECT count(*) FROM bu_stresstest.mevs_transf_func;
+SELECT count(*) FROM bu_stresstest.mkt_ei_data_st;
+SELECT count(*) FROM bu_stresstest.model_param;
+SELECT count(*) FROM bu_stresstest.proc_settings;
+SELECT count(*) FROM bu_stresstest.sae_le_scen_var_ndm;
+SELECT count(*) FROM bu_stresstest.user_comments;
