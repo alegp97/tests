@@ -11,12 +11,12 @@ SELECT count(*) FROM st_stresstest.mevs_labels
 SELECT count(*) FROM st_stresstest.mevs_transf_func
 SELECT count(*) FROM st_stresstest.mkt_ei_data_st
 SELECT count(*) FROM st_stresstest.model_param
-SELECT count(*) FROM st_stresstest.sae_baseline_dat...
+SELECT count(*) FROM st_stresstest.sae_baseline_data
 SELECT count(*) FROM st_stresstest.sae_entity_st
-SELECT count(*) FROM st_stresstest.sae_lc_scen_var...
-SELECT count(*) FROM st_stresstest.sae_override_even...
-SELECT count(*) FROM st_stresstest.sae_scenario_dat...
-SELECT count(*) FROM st_stresstest.sae_scendata_ov...
+SELECT count(*) FROM st_stresstest.sae_lc_scen_variables
+SELECT count(*) FROM st_stresstest.sae_override_events
+SELECT count(*) FROM st_stresstest.sae_scenario_data
+SELECT count(*) FROM st_stresstest.sae_scendata_overrides
 SELECT count(*) FROM st_stresstest.st_metrics_input
 SELECT count(*) FROM st_stresstest.user_comments
 SELECT count(*) FROM st_stresstest.users_stress_test
