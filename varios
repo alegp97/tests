@@ -1,76 +1,23 @@
-# CELL 5 — Launcher multi-BDR para orc_contract_tracker_final.py
-# - Simula CLI con sys.argv -> respeta argparse del script destino
-# - value_date por defecto = último día del mes anterior (ideal para correr el día 20)
-
-from datetime import date, timedelta
-import sys, time, traceback
-
-# ---------- Parámetro opcional desde Job (Notebook widgets) ----------
-try:
-    dbutils.widgets.text("VALUE_DATE", "")
-    user_value_date = dbutils.widgets.get("VALUE_DATE").strip()
-except Exception:
-    user_value_date = ""
-
-def last_day_previous_month() -> str:
-    today = date.today()
-    first = today.replace(day=1)
-    last_prev = first - timedelta(days=1)
-    return last_prev.strftime("%Y-%m-%d")
-
-VALUE_DATE = user_value_date or last_day_previous_month()
-
-# Ruta del script destino (usa orc_dir ya definido en tu celda 4)
-py_path = f"{orc_dir}/SP_BM_Processes/scripts/renumerations/orc_contract_tracker_final.py"
-
-# Lista de BDRs (las de tu captura)
-BDRS = [
-    "BDR_SAN","BDR_MEX","BDR_CHI","BDR_SCA","BDR_SCE",
-    "BDR_NOR","BDR_POL","BDR_USA","BDR_ARG","BDR_POR",
-    "BDR_SCI","BDR_SCU","BDR_AUS","BDR_COL","BDR_PER",
-    "BDR_URU","BDR_SCP"
-]
-
-print(f"Launcher -> script: {py_path}")
-print(f"VALUE_DATE={VALUE_DATE} | BDRS={len(BDRS)}")
-
-# ---------- Ejecución por BDR ----------
-results = []   # [(bdr, "OK"/"ERROR", secs, err_msg)]
-
 for bdr in BDRS:
-    print(f"\n==== Ejecutando {py_path} --bdr {bdr} --value_date {VALUE_DATE} ====")
+    print(f"\n==== Ejecutando {PY_PATH} --bdr {bdr} --value_date {VALUE_DATE} ====")
     t0 = time.time()
-    _orig_argv = sys.argv
-    sys.argv = [py_path, "--bdr", bdr, "--value_date", VALUE_DATE]
     try:
-        with open(py_path, "r", encoding="utf-8") as fh:
-            code = fh.read()
-        # Ejecuta como si fuera 'python orc_contract_tracker_final.py --bdr ... --value_date ...'
-        exec(compile(code, py_path, "exec"), {"__name__": "__main__"})
+        runpy.run_path(
+            PY_PATH,
+            run_globals={
+                "__name__": "__main__",
+                "__argv__": ["--bdr", bdr, "--value_date", VALUE_DATE],
+                "spark": spark,  # <-- inyectamos el SparkSession creado en el launcher
+            },
+        )
         dt = round(time.time() - t0, 2)
         print(f"[OK] {bdr} en {dt}s")
         results.append((bdr, "OK", dt, ""))
+    except SystemExit as e:
+        dt = round(time.time() - t0, 2)
+        results.append((bdr, "ERROR", dt, f"argparse exit: {e}"))
     except Exception as e:
         dt = round(time.time() - t0, 2)
         err = "".join(traceback.format_exception_only(type(e), e)).strip()
         print(f"[ERROR] {bdr} en {dt}s -> {err}")
         results.append((bdr, "ERROR", dt, err))
-    finally:
-        sys.argv = _orig_argv
-
-# ---------- Resumen + exit del job ----------
-oks  = [r for r in results if r[1] == "OK"]
-errs = [r for r in results if r[1] == "ERROR"]
-
-print("\n========= RESUMEN =========")
-print(f"Total BDRs: {len(BDRS)} | OK: {len(oks)} | ERROR: {len(errs)}")
-if errs:
-    print("Con errores en:", ", ".join(r[0] for r in errs))
-    # En Notebook esto marca el run como Failed:
-    if "dbutils" in globals():
-        dbutils.notebook.exit(f"FAILED: {len(errs)} fallos -> {', '.join(r[0] for r in errs)}")
-    else:
-        raise SystemExit(1)
-else:
-    if "dbutils" in globals():
-        dbutils.notebook.exit("SUCCESS")
