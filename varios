@@ -1,23 +1,32 @@
 for bdr in BDRS:
-    print(f"\n==== Ejecutando {PY_PATH} --bdr {bdr} --value_date {VALUE_DATE} ====")
+    print(f"==== Ejecutando {py_path} {bdr} {VALUE_DATE}")
     t0 = time.time()
+
+    saved_argv = sys.argv[:]          # guarda argv original
     try:
+        # Simula: python orc_contract_tracker_final.py --bdr <BDR> --value_date <VD>
+        sys.argv = [py_path, "--bdr", bdr, "--value_date", VALUE_DATE]
+
         runpy.run_path(
-            PY_PATH,
-            run_globals={
-                "__name__": "__main__",
-                "__argv__": ["--bdr", bdr, "--value_date", VALUE_DATE],
-                "spark": spark,  # <-- inyectamos el SparkSession creado en el launcher
-            },
+            py_path,
+            run_name="__main__",                # para que if __name__ == "__main__" se ejecute
+            init_globals={"spark": spark},      # lo que quieras inyectar en globals()
         )
+
         dt = round(time.time() - t0, 2)
         print(f"[OK] {bdr} en {dt}s")
         results.append((bdr, "OK", dt, ""))
+
     except SystemExit as e:
+        # si el script hace sys.exit (p.ej. argparse)
         dt = round(time.time() - t0, 2)
         results.append((bdr, "ERROR", dt, f"argparse exit: {e}"))
+
     except Exception as e:
         dt = round(time.time() - t0, 2)
-        err = "".join(traceback.format_exception_only(type(e), e)).strip()
+        err = "\n".join(traceback.format_exception_only(type(e), e)).strip()
         print(f"[ERROR] {bdr} en {dt}s -> {err}")
         results.append((bdr, "ERROR", dt, err))
+
+    finally:
+        sys.argv = saved_argv 
