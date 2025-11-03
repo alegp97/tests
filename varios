@@ -1,1 +1,129 @@
-Este documento es la guía operativa y de onboarding para nuestro entorno de Databricks orientado a Riesgo de Crédito/Stress Test. Describe, primero, la infraestructura disponible (clusters y SQL Warehouses de Producción y Pre/Integración, nodo analítico específico y limitaciones), para que el lector entienda dónde ejecutar cargas y con qué capacidades. A continuación, establece los “Primeros pasos”: pertenencia a grupos y permisos, navegación por la interfaz (selección de nodo, ajustes y ventanas clave) y cómo está organizado nuestro Workspace. El capítulo de Catalog detalla el Hive-metastore y nuestra taxonomía de datos (Landing, Staging, Business y Common), los workspaces analíticos por tamaño (S, M, L) y la estructura de la base ws_na_stresstest, fijando normas de gobierno y ubicación de objetos. Se cubren prácticas de Data Engineering y el uso del stack SQL (Editor, Dashboards, Query History, Genie y Alerts) para consultas y programación de informes. Además, se explica la integración con Power BI y el uso de Python para análisis y automatización. Finalmente, se documenta la ejecución de nuestros motores y se incluyen enlaces de referencia. Al terminar, cualquier ingeniero o analista debería ser capaz de localizar datos, ejecutar procesos de forma segura y reproducible, y publicar resultados siguiendo nuestros estándares.
+# 📘 Actualización de particiones Delta por CSV (Notebook funcional)
+
+Este cuaderno permite **actualizar una tabla Delta particionada** a partir de un **CSV** (o Excel convertido a CSV) subido a DBFS. Los cambios se aplican por **join keys** (claves de emparejamiento) y solo afectan a las columnas indicadas.
+
+## ¿Qué hace?
+- **Lee** un CSV con registros a actualizar.
+- **Alinea** los nombres de columnas del CSV con los de la tabla (mapeo `fields_updaters` → `fields_to_update`).
+- **Filtra** la partición objetivo (`data_source`, `data_date_part`, `data_timestamp`).
+- **Actualiza** solo los campos seleccionados en filas que matcheen por `join_fields`.
+- Opcionalmente **duplica** una partición existente creando un **nuevo `data_timestamp`** (histórico “what-if”): no borra, añade una nueva versión y aplica los cambios sobre esa copia.
+
+## Parámetros y efectos
+- `update_file_path` (string): Ruta al CSV en DBFS (ej. `dbfs:/FileStore/…/updates.csv`). Debe tener cabecera.
+- `table_name` (string): Nombre *lógico* de la tabla dentro del catálogo/workspace (aquí se usa `ws_na_stress_test.<table_name>`).
+- `data_source` (string): Valor de la partición (ej. `BDR_NOR`).
+- `data_date_part` (YYYY-MM-DD): Día lógico de la partición.
+- `data_timestamp` (YYYY-MM-DD_HH-mm-SS): **Solo si** `new_partition=False`. Identifica el “snapshot” de la partición a modificar.
+- `join_fields` (lista): Claves para unir CSV↔Tabla (ej. `["contra1","slemp"]`). Deben existir en **ambos**.
+- `fields_to_update` (lista): Columnas **de la tabla** que serán actualizadas.
+- `fields_updaters` (lista): Columnas **del CSV** que se mapearán 1:1 a `fields_to_update`. El orden debe coincidir.
+- `new_partition` (bool):
+  - **True** → Se **copia** la partición seleccionada a un **nuevo** `data_timestamp` (generado “ahora”), y **se aplican** los cambios a esa copia. Útil para ensayos o “versionado temporal”.
+  - **False** → Se **actualiza en sitio** la partición existente indicada por `data_timestamp`.
+
+## Flujos típicos
+1. **Corrección histórica controlada**:  
+   - `new_partition=True` → duplica partición (mismo `data_source` y `data_date_part`) con `data_timestamp` nuevo.  
+   - Aplica cambios en la copia → la versión anterior se conserva.
+2. **Parche directo** sobre un snapshot existente:  
+   - `new_partition=False` + `data_timestamp=<ts a modificar>` → actualiza en sitio.
+
+## Requisitos del CSV
+- Debe incluir **todas las `join_fields`** y las columnas listadas en `fields_updaters`.
+- Tipos: si hay enteros/decimales/fechas, el cast se hace en la lógica (ajustar según sea necesario).
+- Separador por defecto `,` y cabecera. (Se puede adaptar a `;`/`|` si procede.)
+
+## Salvaguardas (buenas prácticas)
+- **Dry-run** (opcional): añadir un parámetro `dry_run=True` para mostrar conteos de “filas que serían actualizadas” sin ejecutar el merge.
+- **Validaciones**: Comprobar existencia de tabla, columnas, y que el CSV trae las claves.
+- **Auditoría**: Registrar parámetros de la ejecución y nº de filas afectadas.
+
+> Si solo necesitas cambiar valores, no toques el código: **ajusta los parámetros** y ejecuta.  
+> Si necesitas nuevos campos o reglas, pide soporte al equipo técnico.
+
+
+
+
+
+
+# Databricks widgets (UI funcional)
+dbutils.widgets.removeAll()
+
+# --- Rutas y tabla ---
+dbutils.widgets.text("update_file_path", "dbfs:/FileStore/BENCHMARK_REQUEST_DATA_OUTPUT_v1_1.csv", "📄 CSV en DBFS")
+dbutils.widgets.text("table_name", "orc_temp_jm_ctifrs9_ot", "🧱 Nombre de tabla (sin catálogo)")
+
+# --- Partición objetivo ---
+dbutils.widgets.text("data_source", "BDR_NOR", "🧩 data_source")
+dbutils.widgets.text("data_date_part", "2024-12-31", "📅 data_date_part (YYYY-MM-DD)")
+dbutils.widgets.text("data_timestamp", "2025-10-21_11-37-22", "⏱️ data_timestamp (solo si no se crea nueva partición)")
+
+# --- Join y columnas ---
+dbutils.widgets.text("join_fields", "contra1,slemp", "🔗 join_fields (coma)")
+dbutils.widgets.text("fields_to_update", "flagthreefold,collstatus", "🎯 fields_to_update (tabla) (coma)")
+dbutils.widgets.text("fields_updaters", "ind_threefold,collstatus", "📝 fields_updaters (CSV) (coma)")
+
+# --- Comportamiento ---
+dbutils.widgets.dropdown("new_partition", "true", ["true","false"], "🆕 ¿Crear nueva partición (duplica con nuevo ts)?")
+dbutils.widgets.dropdown("separator", ",", [",",";","|","\\t"], "🔧 Separador CSV")
+
+# --- Lee valores ---
+def _csv_list(name):
+    raw = dbutils.widgets.get(name).strip()
+    return [x.strip() for x in raw.split(",")] if raw else []
+
+params = {
+    "update_file_path": dbutils.widgets.get("update_file_path").strip(),
+    "table_name": dbutils.widgets.get("table_name").strip(),
+    "data_source": dbutils.widgets.get("data_source").strip(),
+    "data_date_part": dbutils.widgets.get("data_date_part").strip(),
+    "data_timestamp": dbutils.widgets.get("data_timestamp").strip(),
+    "join_fields": _csv_list("join_fields"),
+    "fields_to_update": _csv_list("fields_to_update"),
+    "fields_updaters": _csv_list("fields_updaters"),
+    "new_partition": dbutils.widgets.get("new_partition").lower() == "true",
+    "separator": dbutils.widgets.get("separator"),
+}
+
+# --- Validaciones clave (fail fast y mensajes claros) ---
+errors = []
+
+if not params["update_file_path"].startswith("dbfs:/"):
+    errors.append("`update_file_path` debe empezar por `dbfs:/`")
+if not params["table_name"]:
+    errors.append("`table_name` es obligatorio")
+if not params["data_source"]:
+    errors.append("`data_source` es obligatorio")
+if not params["data_date_part"] or len(params["data_date_part"]) != 10:
+    errors.append("`data_date_part` debe tener formato YYYY-MM-DD")
+if not params["join_fields"]:
+    errors.append("`join_fields` no puede estar vacío (usa coma)")
+
+if not params["fields_to_update"]:
+    errors.append("`fields_to_update` no puede estar vacío")
+if len(params["fields_to_update"]) != len(params["fields_updaters"]):
+    errors.append("`fields_to_update` y `fields_updaters` deben tener misma longitud y orden 1:1")
+
+if not params["new_partition"] and not params["data_timestamp"]:
+    errors.append("Si `new_partition` = false, debes indicar `data_timestamp` objetivo")
+
+if errors:
+    raise ValueError("Parámetros inválidos:\n- " + "\n- ".join(errors))
+
+displayHTML(f"""
+<div style="padding:10px;border:1px solid #ccc;border-radius:8px">
+<b>Parámetros validados.</b><br/>
+<b>Tabla:</b> ws_na_stress_test.{params['table_name']}<br/>
+<b>Partición:</b> data_source={params['data_source']} • data_date_part={params['data_date_part']} • new_partition={params['new_partition']}<br/>
+<b>Join:</b> {params['join_fields']}<br/>
+<b>Actualiza:</b> {list(zip(params['fields_to_update'], params['fields_updaters']))}
+</div>
+""")
+
+# Opcional: pasa `params` a tu core notebook (si lo separas)
+# res = dbutils.notebook.run("/Shared/pipelines/core_notebook", 0, {k: (",".join(v) if isinstance(v, list) else str(v)) for k,v in params.items()})
+# print(res)
+
+
+
