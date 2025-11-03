@@ -126,4 +126,14 @@ displayHTML(f"""
 # print(res)
 
 
-
+# --- bind: hacer disponibles los parámetros como variables simples ---
+update_file_path   = params["update_file_path"]
+table_name         = params["table_name"]
+data_source        = params["data_source"]
+data_date_part     = params["data_date_part"]
+data_timestamp     = params["data_timestamp"]  # puede venir vacío si new_partition=True
+join_fields        = params["join_fields"]     # list[str]
+fields_to_update   = params["fields_to_update"]# list[str]
+fields_updaters    = params["fields_updaters"] # list[str]
+new_partition      = params["new_partition"]   # bool
+separator          = params["separator"]       # sep del CSV
