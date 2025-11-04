@@ -1,1 +1,14 @@
-Genie (AI/BI Genie) es la interfaz conversacional de Databricks SQL: haces preguntas en lenguaje natural (“¿cómo evoluciona la morosidad hipotecas vs. consumo?”) y te devuelve tablas, gráficos y el SQL generado sobre tus datos gobernados en Unity Catalog. Funciona dentro de un Genie space que curamos (qué tablas/vistas usar, ejemplos de SQL e instrucciones) y puede apoyarse en un Knowledge Store para entender vocabulario y joins de negocio.
+from pyspark.sql import functions as F
+# Ejemplo si guardas un log en una Delta (ajústalo a tu esquema)
+# logs: (ts_run, user, table, source, date_part, target_ts, affected_rows, status)
+try:
+    display(
+      spark.table("ws_na_stress_test.update_logs")
+        .where( (F.col("table")==table_name) &
+                (F.col("source")==data_source) &
+                (F.col("date_part")==data_date_part))
+        .orderBy(F.desc("ts_run"))
+        .limit(10)
+    )
+except:
+    displayHTML("<i>Sin tabla de logs todavía.</i>")
