@@ -1,36 +1,51 @@
-dur = (datetime.datetime.now() - EXEC["started"]).total_seconds()
-rows = []
-for s in EXEC["steps"]:
-    status = "OK ✅" if s["ok"] else "ERROR ❌"
-    err = html.escape(s["err"])
-    trace = html.escape(s["trace"])
-    note = html.escape(s["note"])
-    rows.append(f"""
-      <tr>
-        <td>{html.escape(s["name"])}</td>
-        <td>{status}</td>
-        <td>{note or "-"}</td>
-      </tr>
-      {f"<tr><td colspan='3'><pre>{trace}</pre></td></tr>" if not s["ok"] else ""}
-    """)
+# --- Widgets ---
+dbutils.widgets.removeAll()
+# valores ejemplo: ajústalos a tus columnas/distintos catálogos
+risk_types = [r.risk_type for r in spark.table("ws_na_stress_test.orc_cons_scen_data_bm").select("risk_type").distinct().orderBy("risk_type").collect()]
+exercise_groups = [r.exercise_group for r in spark.table("ws_na_stress_test.orc_cons_scen_data_bm").select("exercise_group").distinct().orderBy("exercise_group").collect()]
 
-html_out = f"""
-<style>
-  body{{font-family:Arial, sans-serif}}
-  table{{border-collapse:collapse;width:100%}}
-  th,td{{border:1px solid #ddd;padding:8px;vertical-align:top}}
-  th{{background:#f6f6f6;text-align:left}}
-  pre{{white-space:pre-wrap;overflow:auto}}
-  .meta{{color:#555;font-size:12px;margin:6px 0}}
-</style>
-<h2>Resumen de ejecución</h2>
-<div class="meta">Inicio: {EXEC["started"]:%Y-%m-%d %H:%M:%S} · Duración: {dur:.1f}s</div>
-<table>
-  <thead><tr><th>Paso</th><th>Estado</th><th>Nota</th></tr></thead>
-  <tbody>
-    {''.join(rows) if rows else "<tr><td colspan='3'>No se registraron pasos.</td></tr>"}
-  </tbody>
-</table>
-"""
+dbutils.widgets.dropdown("risk_type", risk_types[0] if risk_types else "ALL", ["ALL"] + risk_types, "Risk type")
+dbutils.widgets.multiselect("exercise_group", exercise_groups[0] if exercise_groups else "", exercise_groups, "Exercise group")
+dbutils.widgets.combobox("sort_by", "ead_provisions_1", ["ead_provisions_1","ead_provisions_3","cumulative_pd_15"], "Ordenar por")
+dbutils.widgets.dropdown("top_n", "50", ["10","50","100","All"], "Top N")
+dbutils.widgets.text("pd_multiplier", "1.00", "PD ×")
+dbutils.widgets.text("ead_multiplier", "1.00", "EAD ×")
 
-displayHTML(html_out)
+# --- Lectura de parámetros ---
+risk_type_v = dbutils.widgets.get("risk_type")
+exercise_group_v = dbutils.widgets.get("exercise_group").split(",") if dbutils.widgets.get("exercise_group") else []
+sort_by_v = dbutils.widgets.get("sort_by")
+top_n_v = dbutils.widgets.get("top_n")
+pd_mult = float(dbutils.widgets.get("pd_multiplier"))
+ead_mult = float(dbutils.widgets.get("ead_multiplier"))
+
+# --- Base DF ---
+df = spark.table("ws_na_stress_test.orc_cons_scen_data_bm")
+
+# --- Filtros dinámicos ---
+if risk_type_v != "ALL":
+    df = df.filter(F.col("risk_type") == risk_type_v)
+if exercise_group_v:
+    df = df.filter(F.col("exercise_group").isin(exercise_group_v))
+
+# --- What-if: recalcular provisión (ejemplo simple) ---
+# Ajusta los nombres de columnas a tu esquema real:
+from pyspark.sql import functions as F
+
+df2 = (df
+    .withColumn("pd_adj", F.col("cumulative_pd_15") * F.lit(pd_mult))
+    .withColumn("ead_adj", F.col("ead") * F.lit(ead_mult))                          # si tienes otra col de EAD, cámbiala
+    .withColumn("lgd", F.coalesce(F.col("lgd"), F.lit(0.45)))                       # fallback si no tienes LGD explícito
+    .withColumn("provision_adj", F.col("ead_adj") * F.col("pd_adj") * F.col("lgd"))
+)
+
+# --- Orden y Top N ---
+df2 = df2.orderBy(F.col(sort_by_v).desc() if sort_by_v in df2.columns else F.col("provision_adj").desc())
+if top_n_v != "All":
+    df2 = df2.limit(int(top_n_v))
+
+# --- Mostrar tabla ---
+display(df2.select(
+    "risk_type","exercise_group","ead","cumulative_pd_15","lgd",
+    "pd_adj","ead_adj","provision_adj"
+))
