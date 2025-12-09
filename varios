@@ -1,35 +1,25 @@
-from pyspark.sql import SparkSession
+import zipfile
+import io
+from pyspark.sql.functions import *
 
-def main():
-    # Spark de Databricks (solo funciona en el cluster, no local)
-    spark = SparkSession.builder.getOrCreate()
+zip_path = "/dbfs/FileStore/103_input_prep_aby.zip"
 
-    # ==== Celda de autenticación (versión Python) ====
-    # Equivalente al %scala de tu notebook
-    sec = dbutils.secrets.get("scpstresscrit102", "gscp1glbsp4stressauth101").split("\\|##\\|")
-    clientScret = sec[0]
-    clientId = sec[1]
-    clientEndpoint = "https://login.microsoftonline.com/35595a02-4d6d-4aac-99e1-f9ab4cd872db/oauth2/token"
-    storageAccount = "gscplweustastresscrit101"  # mismo que en tu celda Scala
+def read_zip_in_chunks(zip_path, chunk_size_mb=100):
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        csv_name = z.namelist()[0]   # primer archivo dentro del ZIP
+        with z.open(csv_name) as f:
+            while True:
+                chunk = f.read(chunk_size_mb * 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk.decode('utf-8', errors='ignore')
 
-    spark.conf.set(f"fs.azure.account.auth.type.{storageAccount}.dfs.core.windows.net", "OAuth")
-    spark.conf.set(
-        f"fs.azure.account.oauth.provider.type.{storageAccount}.dfs.core.windows.net",
-        "org.apache.hadoop.fs.azurebfs.oauth2.ClientCredsTokenProvider",
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.id.{storageAccount}.dfs.core.windows.net",
-        clientId,
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.secret.{storageAccount}.dfs.core.windows.net",
-        clientScret,
-    )
-    spark.conf.set(
-        f"fs.azure.account.oauth2.client.endpoint.{storageAccount}.dfs.core.windows.net",
-        clientEndpoint,
-    )
+chunks_rdd = spark.sparkContext.parallelize(
+    list(read_zip_in_chunks(zip_path)),
+    numSlices=32
+)
 
-    # ==== Celda SQL ====
-    df = spark.sql("select * from ws_na_stress_test.orc_cons_data_bmh limit 10")
-    df.show(10, truncate=False)
+lines_rdd = chunks_rdd.flatMap(lambda x: x.splitlines())
+
+df = spark.read.csv(lines_rdd, header=True)
+df.show(5)
