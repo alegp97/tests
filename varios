@@ -1,25 +1,30 @@
-import zipfile
-import io
-from pyspark.sql.functions import *
+import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.{BufferedReader, InputStreamReader, OutputStreamWriter}
+import com.opencsv.{CSVReader, CSVWriter}
 
-zip_path = "/dbfs/FileStore/103_input_prep_aby.zip"
+def processCsv(fs: FileSystem,
+               csvIn: Path,
+               csvOut: Path,
+               csvDelimiter: Char): Unit = {
 
-def read_zip_in_chunks(zip_path, chunk_size_mb=100):
-    with zipfile.ZipFile(zip_path, 'r') as z:
-        csv_name = z.namelist()[0]   # primer archivo dentro del ZIP
-        with z.open(csv_name) as f:
-            while True:
-                chunk = f.read(chunk_size_mb * 1024 * 1024)
-                if not chunk:
-                    break
-                yield chunk.decode('utf-8', errors='ignore')
+  val inStream  = fs.open(csvIn)
+  val reader    = new CSVReader(new BufferedReader(new InputStreamReader(inStream)), csvDelimiter)
 
-chunks_rdd = spark.sparkContext.parallelize(
-    list(read_zip_in_chunks(zip_path)),
-    numSlices=32
-)
+  val outStream = fs.create(csvOut, true)    // overwrite = true
+  val writer    = new CSVWriter(new OutputStreamWriter(outStream))
 
-lines_rdd = chunks_rdd.flatMap(lambda x: x.splitlines())
+  try {
+    var line: Array[String] = reader.readNext()
+    while (line != null) {
 
-df = spark.read.csv(lines_rdd, header=True)
-df.show(5)
+      // aquí haces tus transformaciones
+      val processed = line.map(_.trim)
+
+      writer.writeNext(processed, false)
+      line = reader.readNext()
+    }
+  } finally {
+    writer.close()
+    reader.close()
+  }
+}
