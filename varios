@@ -1,6 +1,48 @@
-SHOW PARTITIONS land_economic_research_hist.historical_data;
-SHOW PARTITIONS land_economic_research_hist.modification_tracker;
-SHOW PARTITIONS land_economic_research_hist.modifications_taxonomy;
-SHOW PARTITIONS land_economic_research_hist.scenarios_1;
-SHOW PARTITIONS land_economic_research_hist.scenarios_2;
-SHOW PARTITIONS land_economic_research_hist.scenarios_2_id;
+%scala
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+
+val conf = spark.sparkContext.hadoopConfiguration
+
+// === CONFIGURA ESTO ===
+// src puede ser: (a) carpeta estilo Spark output ".../algo.csv/"  o  (b) fichero ".../part-....csv"
+val src = new Path("abfss://<container>@<account>.dfs.core.windows.net/<ruta>/output.csv/") // o part-....
+val dst = new Path("abfss://<container>@<account>.dfs.core.windows.net/<ruta>/final.csv")  // fichero destino
+
+val debug = true
+// ======================
+
+def resolveSinglePartCsvFile(fs: FileSystem, dir: Path, debug: Boolean = false): Path = {
+  val statuses = fs.listStatus(dir)
+  if (debug) {
+    println(s"[DEBUG] Listing: $dir")
+    statuses.foreach(s => println(s" - ${if (s.isDirectory) "DIR " else "FILE"} ${s.getPath}"))
+  }
+
+  val partFiles = statuses
+    .filter(s => s.isFile)
+    .map(_.getPath)
+    .filter(p => p.getName.startsWith("part-") && p.getName.endsWith(".csv"))
+
+  require(partFiles.nonEmpty, s"No part-*.csv files found in $dir")
+  require(partFiles.length == 1, s"Expected exactly 1 part-*.csv in $dir but found ${partFiles.length}: ${partFiles.mkString(", ")}")
+
+  partFiles.head
+}
+
+val srcFs = src.getFileSystem(conf)
+val dstFs = dst.getFileSystem(conf)
+
+// 1) Determina si src es fichero o carpeta
+val srcStatus = srcFs.getFileStatus(src)
+val srcFile: Path =
+  if (srcStatus.isDirectory) resolveSinglePartCsvFile(srcFs, src, debug)
+  else src
+
+// 2) Prepara destino
+dstFs.mkdirs(dst.getParent)
+if (dstFs.exists(dst)) dstFs.delete(dst, false)
+
+// 3) Copia (mismo o distinto FS, da igual)
+FileUtil.copy(srcFs, srcFile, dstFs, dst, false, conf)
+
+println(s"✅ Copiado: $srcFile  ->  $dst")
