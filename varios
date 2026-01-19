@@ -15,3 +15,14 @@
 @SuppressStaticInitializationFor({ ... })
 public class WorkbookTabManagerTest {
 }
+
+
+
+  "org.apache.spark.*",
+  "scala.*",
+  "com.databricks.*",
+  "javax.management.*",
+  "org.apache.logging.*",
+  "org.slf4j.*",
+  "com.sun.*",
+  "sun.*"
