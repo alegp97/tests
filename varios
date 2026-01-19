@@ -1,14 +1,17 @@
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({
   "javax.management.*",
+  "javax.management.remote.*",
+  "javax.net.ssl.*",
   "javax.script.*",
   "jdk.nashorn.*",
-  "javax.net.ssl.*",
   "org.apache.logging.*",
   "org.apache.log4j.*",
   "org.slf4j.*",
   "com.sun.*",
   "sun.*"
 })
-@PrepareForTest({ HSSFFont.class, HSSFCellStyle.class, HSSFWorkbook.class, WorkbookStyleManager.class })
-public class WorkbookStyleManagerTest {
+@PrepareForTest({ ... })
+@SuppressStaticInitializationFor({ ... })
+public class WorkbookTabManagerTest {
+}
