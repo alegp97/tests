@@ -1,23 +1,21 @@
-@Before
-public void beforeMethod() throws Exception {
+@PowerMockIgnore({
+  "javax.management.*",
+  "javax.script.*",
+  "jdk.nashorn.*",
+  "org.apache.logging.*",
+  "org.slf4j.*",
+  "com.sun.*",
+  "sun.*",
+  "org.apache.spark.*",
+  "scala.*"
+})
 
-  // 1) Mock de estáticos del factory
-  PowerMockito.mockStatic(VariableResolutionHandlerFactory.class);
-  BDDMockito.given(VariableResolutionHandlerFactory.getVariableResolutionHandler())
-      .willReturn(variablesResHandler);
+PowerMockito.mockStatic(JDBCExecutorHandler.class);
 
-  // 2) Stub del translate
-  Mockito.when(variablesResHandler.translateQuery(session, execution, querycontent))
-      .thenReturn(query);
+JDBCExecutorHandler jdbcExecutorHandlerMock = PowerMockito.mock(JDBCExecutorHandler.class);
 
-  // 3) Spy de estáticos de Configuration (IMPORTANTE: spy, no mock puro)
-  PowerMockito.spy(Configuration.class);
+PowerMockito.when(JDBCExecutorHandler.getInstance()).thenReturn(jdbcExecutorHandlerMock);
 
-  // 4) Anula loadJSon (private/static) sin ejecutar cuerpo
-  PowerMockito.doNothing()
-      .when(Configuration.class, "loadJSon");   // usa el nombre exacto
-
-  // 5) Asegura que getQuery ejecute el método real
-  PowerMockito.doCallRealMethod()
-      .when(Configuration.class, "getQuery", Mockito.any(), Mockito.any(), Mockito.any());
-}
+PowerMockito.when(jdbcExecutorHandlerMock.launchQueriesAndGetRows(
+    execution, session, con, query, true, true, JDBCHandler.HIVE
+)).thenReturn(resultQueryExecution);
