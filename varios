@@ -1,28 +1,16 @@
-@RunWith(PowerMockRunner.class)
-@PowerMockIgnore({
-  "javax.management.*",
-  "javax.management.remote.*",
-  "javax.net.ssl.*",
-  "javax.script.*",
-  "jdk.nashorn.*",
-  "org.apache.logging.*",
-  "org.apache.log4j.*",
-  "org.slf4j.*",
-  "com.sun.*",
-  "sun.*"
-})
-@PrepareForTest({ ... })
-@SuppressStaticInitializationFor({ ... })
-public class WorkbookTabManagerTest {
-}
+ // 👇 “Pasa de loadJSon”: no ejecuta nada
+    PowerMockito.doNothing().when(Configuration.class, "loadJSon");
 
+    // Si getQuery usa loadJSon internamente, ahora no hará nada.
+    // Ahora stub del resto que sí quieres:
+    PowerMockito.mockStatic(VariableResolutionHandlerFactory.class);
+    BDDMockito.given(VariableResolutionHandlerFactory.getVariableResolutionHandler())
+        .willReturn(variablesResHandler);
 
+    PowerMockito.when(variablesResHandler.translateQuery(session, execution, querycontent))
+        .thenReturn(query);
 
-  "org.apache.spark.*",
-  "scala.*",
-  "com.databricks.*",
-  "javax.management.*",
-  "org.apache.logging.*",
-  "org.slf4j.*",
-  "com.sun.*",
-  "sun.*"
+    // 👇 IMPORTANTE: como has mockeado estáticos de Configuration,
+    // tienes que decir qué debe devolver getQuery.
+    PowerMockito.when(Configuration.getQuery(K.QUERY_ERR_DETAIL_VT, session, execution))
+        .thenCallRealMethod();
