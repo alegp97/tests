@@ -1,6 +1,8 @@
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore({
   "javax.management.*",
+  "javax.script.*",
+  "jdk.nashorn.*",
   "javax.net.ssl.*",
   "org.apache.logging.*",
   "org.apache.log4j.*",
@@ -9,3 +11,4 @@
   "sun.*"
 })
 @PrepareForTest({ HSSFFont.class, HSSFCellStyle.class, HSSFWorkbook.class, WorkbookStyleManager.class })
+public class WorkbookStyleManagerTest {
