@@ -1,172 +1,126 @@
-package com.santander.stresstest.extractor.workbook;
-
-import com.santander.supra.core.datalake.hive.JDBCHandler;
-import com.santander.supra.core.datalake.jdbc.JDBCExecutorHandler;
-import com.santander.supra.core.utils.Execution;
-import com.santander.supra.core.utils.SessionWrapper;
-import com.santander.supra.core.datalake.persist.PersistenceHandler;
-import com.santander.supra.core.datalake.persist.PersistenceHandlerFactory;
-import com.santander.supra.core.datalake.domain.Table;
-
-import org.apache.log4j.Logger;
-import org.apache.poi.hssf.usermodel.HSSFCellStyle;
-import org.apache.poi.hssf.usermodel.HSSFFont;
-import org.apache.poi.hssf.usermodel.HSSFRow;
-import org.apache.poi.hssf.usermodel.HSSFSheet;
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-
-import org.mockito.Mockito;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.core.classloader.annotations.SuppressStaticInitializationFor;
-import org.powermock.modules.junit4.PowerMockRunner;
-import org.powermock.reflect.Whitebox;
-
-import java.sql.Connection;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
-
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({
-        WorkbookTabManager.class,
-        WorkbookStyleManager.class,
-        JDBCHandler.class,
-        JDBCExecutorHandler.class,
-        PersistenceHandlerFactory.class,
-        Logger.class
+    JDBCHandler.class,
+    HSSFRichTextString.class,
+    HSSFCell.class,
+    HSSFRow.class,
+    HSSFSheet.class,
+    PersistenceHandlerFactory.class,
+    JDBCExecutorHandler.class,
+    Detail.class,
+    Table.class,
+    Logger.class,
+    HSSFFont.class,
+    HSSFCellStyle.class,
+    HSSFWorkbook.class,
+    WorkbookTabManager.class
 })
 @SuppressStaticInitializationFor({
-        // IMPORTANT: suprime el <clinit> que hace Logger.getLogger(...)
-        "com.santander.stresstest.extractor.workbook.WorkbookTabManager",
-        // si WorkbookStyleManager tiene estáticos “pesados”, también lo suprimimos (opcional pero suele ayudar)
-        "com.santander.stresstest.extractor.workbook.WorkbookStyleManager"
+    // ya lo tenías:
+    "com.santander.supra.core.utils.DataProperties",
+    "com.santander.supra.core.datalake.hive.JDBCHandler",
+    // 🔴 mínimo para cortar el NoSuchMethodError del log4j en <clinit>
+    "com.santander.stresstest.extractor.workbook.WorkbookTabManager"
 })
 public class WorkbookTabManagerTest {
 
+    @Mock HSSFWorkbook hssfWorkbook;
+    @Mock HSSFCellStyle hssfCellStyle;
+    @Mock HSSFSheet hssfSheet;
+    @Mock HSSFFont hssfFont;
+
+    @Mock Table table;
+    @Mock HSSFRow row;
+    @Mock HSSFCell cell;
+
+    @Mock SessionWrapper session;
+    @Mock Execution execution;
+
+    @Mock PersistenceHandler pHandler;
+
+    @Mock JDBCExecutorHandler jdbcExecutorHandler;
+
+    List<Map<String, Object>> resultQueryExecution = new ArrayList<>();
+
+    private static final String strResult = "true";
     private static final String sqlStatement = "select * from table";
     private static final String typeValidation = "VT";
 
-    private HSSFWorkbook wb;
-    private HSSFSheet sheet;
-    private HSSFRow row;
-    private org.apache.poi.ss.usermodel.Cell cell;
-
-    private Table table;
-
-    private SessionWrapper session;
-    private Execution execution;
-
-    private Connection con;
-
-    private JDBCExecutorHandler jdbcExec;
-    private Logger log;
-
     @Before
-    public void setUp() throws Exception {
+    public void beforeMethod() throws Exception {
 
-        // --- mocks POI ---
-        wb = PowerMockito.mock(HSSFWorkbook.class, Mockito.RETURNS_DEEP_STUBS);
-        sheet = PowerMockito.mock(HSSFSheet.class, Mockito.RETURNS_DEEP_STUBS);
-        row = PowerMockito.mock(HSSFRow.class, Mockito.RETURNS_DEEP_STUBS);
-        cell = PowerMockito.mock(org.apache.poi.ss.usermodel.Cell.class, Mockito.RETURNS_DEEP_STUBS);
+        // --- POI base ---
+        PowerMockito.mock(HSSFWorkbook.class);
+        PowerMockito.when(hssfWorkbook.createCellStyle()).thenReturn(hssfCellStyle);
+        PowerMockito.when(hssfWorkbook.createFont()).thenReturn(hssfFont);
 
-        // estilos (si WorkbookStyleManager los usa)
-        HSSFCellStyle style = PowerMockito.mock(HSSFCellStyle.class);
-        HSSFFont font = PowerMockito.mock(HSSFFont.class);
-        when(wb.createCellStyle()).thenReturn(style);
-        when(wb.createFont()).thenReturn(font);
+        row = PowerMockito.mock(HSSFRow.class);
 
-        // IMPORTANT: cubre overloads de POI (int y short)
-        when(sheet.createRow(anyInt())).thenReturn(row);
-        when(sheet.createRow(anyShort())).thenReturn(row);
+        // ✅ cubre overloads: en tu código hay createRow((short)0) pero POI muchas veces llama createRow(int)
+        PowerMockito.when(hssfSheet.createRow(Mockito.anyInt())).thenReturn(row);
+        PowerMockito.when(hssfSheet.createRow(Mockito.anyShort())).thenReturn(row);
 
-        when(row.createCell(anyInt())).thenReturn(cell);
-        when(row.createCell(anyShort())).thenReturn(cell);
+        // ✅ cubre overloads: createCell(short) y createCell(int)
+        PowerMockito.when(row.createCell(Mockito.anyInt())).thenReturn(cell);
+        PowerMockito.when(row.createCell(Mockito.anyShort())).thenReturn(cell);
 
-        // si el código usa getLastRowNum()
-        when(sheet.getLastRowNum()).thenReturn(0);
+        // ✅ si el código usa getLastRowNum() (en detailedTable), evita NPE/valores raros
+        PowerMockito.when(hssfSheet.getLastRowNum()).thenReturn(0);
 
-        // --- domain mocks ---
+        // --- table ---
         table = PowerMockito.mock(Table.class);
-        when(table.getNombreTabla()).thenReturn("tabla_origen");
+        PowerMockito.when(table.getNombreTabla()).thenReturn("tabla_origen");
 
-        session = PowerMockito.mock(SessionWrapper.class, Mockito.RETURNS_DEFAULTS);
-        execution = PowerMockito.mock(Execution.class, Mockito.RETURNS_DEFAULTS);
+        // --- persistence ---
+        PowerMockito.mockStatic(PersistenceHandlerFactory.class);
+        BDDMockito.given(PersistenceHandlerFactory.getPersistenceHandler()).willReturn(pHandler);
 
-        // --- JDBC mocks ---
-        con = PowerMockito.mock(Connection.class);
-
+        // --- JDBCHandler (connection) ---
         PowerMockito.mockStatic(JDBCHandler.class);
+        Connection con = PowerMockito.mock(Connection.class);
         PowerMockito.when(JDBCHandler.getConnection(JDBCHandler.HIVE)).thenReturn(con);
 
-        // JDBCExecutorHandler static singleton
-        jdbcExec = PowerMockito.mock(JDBCExecutorHandler.class, Mockito.RETURNS_DEEP_STUBS);
+        // --- JDBCExecutorHandler singleton ---
         PowerMockito.mockStatic(JDBCExecutorHandler.class);
-        PowerMockito.when(JDBCExecutorHandler.getInstance()).thenReturn(jdbcExec);
+        PowerMockito.when(JDBCExecutorHandler.getInstance()).thenReturn(jdbcExecutorHandler);
 
-        // resultado no vacío para evitar NPE/loops raros en fillDetails
-        List<Map<String, Object>> resultQueryExecution = new ArrayList<>();
-        Map<String, Object> rowMap = new HashMap<>();
-        rowMap.put("dummy", "dummy");
-        resultQueryExecution.add(rowMap);
+        // ✅ devuelve lista NO vacía para que fillDetails / loops no revienten
+        Map<String, Object> objectMapHive = new HashMap<>();
+        objectMapHive.put("dummy", "dummy");
+        resultQueryExecution.add(objectMapHive);
 
-        when(jdbcExec.launchQueriesAndGetRows(
-                eq(execution),
-                eq(session),
-                eq(con),
-                anyString(),
-                anyBoolean(),
-                anyBoolean(),
-                eq(JDBCHandler.HIVE)
-        )).thenReturn(resultQueryExecution);
+        PowerMockito.when(
+            JDBCExecutorHandler.getInstance().launchQueriesAndGetRows(
+                Mockito.eq(execution),
+                Mockito.eq(session),
+                Mockito.eq(con),
+                Mockito.anyString(),
+                Mockito.anyBoolean(),
+                Mockito.anyBoolean(),
+                Mockito.eq(JDBCHandler.HIVE)
+            )
+        ).thenReturn(resultQueryExecution);
 
-        // --- persistence (si lo usa) ---
-        PersistenceHandler pHandler = PowerMockito.mock(PersistenceHandler.class, Mockito.RETURNS_DEEP_STUBS);
-        PowerMockito.mockStatic(PersistenceHandlerFactory.class);
-        PowerMockito.when(PersistenceHandlerFactory.getPersistenceHandler()).thenReturn(pHandler);
-
-        // --- Logger: como hemos suprimido <clinit>, el campo static logger queda null -> lo inyectamos ---
-        log = PowerMockito.mock(Logger.class);
+        // --- Logger: como hemos suprimido <clinit>, logger estático queda null -> lo inyectamos ---
         PowerMockito.mockStatic(Logger.class);
+        Logger log = PowerMockito.mock(Logger.class);
         PowerMockito.when(Logger.getLogger(WorkbookTabManager.class)).thenReturn(log);
 
-        // IMPORTANT: inyectar el logger estático dentro de WorkbookTabManager
-        Whitebox.setInternalState(WorkbookTabManager.class, "logger", log);
-
-        // Si WorkbookStyleManager tiene estáticos y te devuelve null, también puedes forzarlo
-        // (solo si tu código hace WorkbookStyleManager.getTitleStyle(...) etc)
-        PowerMockito.mockStatic(WorkbookStyleManager.class);
-        PowerMockito.when(WorkbookStyleManager.getTitleStyle(any(HSSFWorkbook.class))).thenReturn(style);
-        PowerMockito.when(WorkbookStyleManager.getHeaderStyle(any(HSSFWorkbook.class))).thenReturn(style);
-        PowerMockito.when(WorkbookStyleManager.getRegularStyle(any(HSSFWorkbook.class))).thenReturn(style);
+        // 🔥 este es EL fix para el NPE en logger.info(...) cuando <clinit> no corrió
+        org.powermock.reflect.Whitebox.setInternalState(WorkbookTabManager.class, "logger", log);
     }
 
     @Test
     public void generateSummaryTableTest() throws Exception {
-        // Si el método usa wb/sheet/table, con lo stubbeado no debe petar
-        WorkbookTabManager.generateSummaryTable(table, wb, sheet);
-
-        // assert “humilde” pero útil: que el flujo ha llegado al logger (evita falsos verdes)
-        // si quieres, verifica también setColumnWidth:
-        // Mockito.verify(sheet, Mockito.atLeastOnce()).setColumnWidth(anyInt(), anyInt());
-        assertTrue(true);
+        WorkbookTabManager.generateSummaryTable(table, hssfWorkbook, hssfSheet);
+        assertEquals("true", strResult);
     }
 
     @Test
     public void generateDetailedTableTest() throws Exception {
-        WorkbookTabManager.generateDetailedTable(sqlStatement, table, wb, sheet, typeValidation, execution, session);
-
-        // idem: confirmamos que ha podido loguear (si en tu código loguea query)
-        // Mockito.verify(log, Mockito.atLeastOnce()).info(Mockito.anyString());
-        assertTrue(true);
+        WorkbookTabManager.generateDetailedTable(
+            sqlStatement, table, hssfWorkbook, hssfSheet, typeValidation, execution, session
+        );
+        assertEquals("true", strResult);
     }
 }
