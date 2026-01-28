@@ -1,18 +1,1 @@
-<exclusions>
-    <exclusion>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-core-asl</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-mapper-asl</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-jaxrs</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>org.codehaus.jackson</groupId>
-      <artifactId>jackson-xc</artifactId>
-    </exclusion>
-  </exclusions>
+El Hive Metastore es el “catálogo central” donde Databricks guarda la información sobre qué bases de datos, tablas y vistas existen, cómo son y dónde están almacenadas, aunque no contiene los datos en sí. Gracias a él, tanto Spark como Databricks SQL y los SQL Warehouses pueden ver y usar exactamente los mismos objetos de forma coherente. Por eso es clave cuando trabajamos con SQL Warehouse: cada consulta usa el metastore para saber qué tablas existen, cómo están organizadas y qué permisos aplicar. En los entornos modernos este papel lo cumple Unity Catalog, que añade gobernanza, control de accesos y auditoría, pero la idea es la misma: tener una fuente única y ordenada que permita descubrir, gestionar y consultar todos los datos de la plataforma de forma segura y consistente.
