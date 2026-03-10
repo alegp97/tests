@@ -9,3 +9,6 @@ val allUsers = spark.sqlContext.table(s"${staging_db}.users_ecresearch")
         .filter(_.nonEmpty)
     ).distinct.toList
   )
+if (usersEmisor.isEmpty) {
+  log.warn(s"[ERESEARCH] - No hay destinatarios TO para la notificación ${notification.id}")
+}
