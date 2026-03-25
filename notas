@@ -1,1 +1,11 @@
+Incidencia válida. Se han versionado credenciales de base de datos en texto plano en archivos de configuración gestionados por el repositorio, tanto para PROD como para PRE. Estas credenciales deben considerarse comprometidas.
 
+Plan de remediación:
+
+Rotar inmediatamente las contraseñas expuestas.
+Eliminar las credenciales de los archivos .properties versionados.
+Externalizar la resolución de secretos mediante variables de entorno o un gestor de secretos en despliegue/tiempo de ejecución.
+Revisar el historial del repositorio y el alcance de acceso para evaluar una posible exposición.
+Añadir o reforzar controles de detección de secretos para evitar recurrencias.
+
+Se sustituirán los valores hardcodeados por placeholders resueltos de forma segura en runtime y se verificará que no queden credenciales en texto plano dentro del código versionado.
