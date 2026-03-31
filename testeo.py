@@ -1,2 +1,1 @@
-
-El comentario es correcto: el refactor mueve el cálculo de size/modTime a nivel de fichero hoja, pero usa getListStatus(parentPath), por lo que vuelve a listar el mismo directorio repetidamente. En un directorio con N hijos esto provoca N llamadas idénticas. Lo adecuado es deduplicar los parentPath primero y calcular size/modTime una única vez por directorio.
+El comentario es razonable. Si estas filas comparten el mismo scope+sandbox(+table) y reutilizan el mismo variable, podemos introducir duplicados o ambigüedad en la resolución. Solo sería correcto si otra columna que participa en la clave lógica distingue inequívocamente cada caso. Merece revisar la constraint y la query de lookup antes de darlo por válido.
