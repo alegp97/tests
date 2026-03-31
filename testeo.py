@@ -1,1 +1,1 @@
-Correcto. Aquí estamos abriendo tanto el InputStream como el Workbook sin cerrarlos explícitamente. Lo adecuado es usar try-with-resources para ambos, de forma que se liberen también si WorkbookFactory.create(...) o obtainJsonConfig(...) lanzan una excepción.
+Correcto. Aquí se abre un InputStream mediante DbfsHandler.getInputStream(...) y además se crea un Workbook, pero ninguno de los dos se cierra explícitamente. En una acción que puede ejecutarse repetidamente esto puede provocar fugas de recursos. Conviene usar try-with-resources para ambos.
