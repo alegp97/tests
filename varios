@@ -1,14 +1,67 @@
-val allUsers = spark.sqlContext.table(s"${staging_db}.users_ecresearch")
-  .select(col("user_email"), col("user_rol"))
-  .collect()
-  .groupBy(r => Option(r.getAs[String]("user_rol")).getOrElse("").toUpperCase)
-  .mapValues(
-    _.flatMap(r =>
-      Option(r.getAs[String]("user_email"))
-        .map(_.trim.toLowerCase)
-        .filter(_.nonEmpty)
-    ).distinct.toList
-  )
-if (usersEmisor.isEmpty) {
-  log.warn(s"[ERESEARCH] - No hay destinatarios TO para la notificación ${notification.id}")
-}
+Quiero que actúes como arquitecto y guía técnico de una prueba de concepto en Databricks para leer un fichero CSV alojado en SharePoint usando Python.
+
+Objetivo:
+Necesito validar si desde Databricks podemos acceder a un fichero de SharePoint, descargarlo y leerlo con Spark.
+
+Contexto de partida:
+- Host de SharePoint: santandernet.sharepoint.com
+- Site detectado: /sites/CRST-BAU
+- Vínculo de SharePoint del fichero:
+  https://santandernet.sharepoint.com/:x:/r/sites/CRST-BAU/Shared%20Documents/00%20-20Framework/02%20-20Functional/USERS_STRESS_TEST_20210205.csv?d=w1f9a0891f903475c82cb249dedef05c6&csf=1&web=1&e=U6jrRx
+
+Necesito que tomes ese vínculo solo como pista para extraer:
+- hostname
+- site path
+- path relativo del fichero dentro de la document library
+
+Lo que quiero de ti:
+1. Guíame paso a paso, sin saltarte pasos.
+2. No des una explicación teórica larga al principio: ve en modo operativo.
+3. Divide la solución en fases claras y pequeñas.
+4. En cada fase indica:
+   - qué estamos validando
+   - qué prerequisitos hay
+   - qué celda o código exacto debo ejecutar en Databricks
+   - qué resultado debería esperar
+   - qué significa cada posible error
+5. Si falta algún dato crítico, dilo explícitamente.
+6. No asumas acceso mágico a secretos ni permisos.
+7. Usa enfoque prudente: primero autenticación, luego resolución del site, luego drives, luego localización exacta del fichero, luego descarga, luego lectura con Spark.
+
+Condiciones técnicas:
+- Quiero hacerlo con Python en notebook de Databricks.
+- Si hace falta instalar librerías, proponme la forma correcta en Databricks usando %pip.
+- Si el acceso a paquetes corporativos requiere JFrog/Artifactory, indícamelo como paso separado.
+- Propón uso de dbutils.secrets para tenant_id, client_id y client_secret.
+- Usa Microsoft Graph y MSAL para la autenticación.
+- No quiero una solución basada en interfaz web de SharePoint ni en URLs de edición tipo /_layouts/15/Doc2.aspx.
+- Quiero una solución robusta para automatización posterior.
+
+Secuencia que quiero seguir contigo:
+Fase 1. Confirmar librerías necesarias
+Fase 2. Instalar librerías en Databricks
+Fase 3. Cargar secretos
+Fase 4. Obtener access token con MSAL
+Fase 5. Resolver el site en Microsoft Graph
+Fase 6. Listar los drives/document libraries del site
+Fase 7. Verificar el nombre real de las carpetas del path
+Fase 8. Localizar el fichero exacto
+Fase 9. Descargar el CSV
+Fase 10. Guardarlo temporalmente en DBFS o volumen
+Fase 11. Leerlo con Spark
+Fase 12. Concluir qué ha quedado validado y qué falta para productivizarlo
+
+Formato que quiero en tu respuesta:
+- Empieza directamente por Fase 1
+- Para cada fase:
+  - Objetivo
+  - Código
+  - Qué espero ver
+  - Errores típicos
+  - Siguiente paso
+- No me des todas las fases de golpe si no es necesario; puedes avanzar de forma incremental, pero deja preparado el flujo completo.
+- Si detectas que el path del vínculo puede tener codificación rara en los nombres de carpetas, ayúdame a verificarlo con listados en Graph en vez de asumirlo.
+
+Además:
+- Si consideras mejor usar primero una pequeña celda para inspeccionar y normalizar el path extraído desde el vínculo de SharePoint, inclúyela.
+- Si ves una alternativa mejor que descargar directamente el fichero, menciona la alternativa, pero mantén como camino principal la descarga controlada y posterior lectura con Spark.
