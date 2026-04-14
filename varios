@@ -1,36 +1,13 @@
-import re
-import msal
-import requests
+hostname = "santandernet.sharepoint.com"
+site_path = "/sites/CRST-BAU"
 
-scope_name = "scpstresscrit102"
-secret_key = "gscplglbsp4stressauth101"
+headers = {
+    "Authorization": f"Bearer {result['access_token']}",
+    "Content-Type": "application/json"
+}
 
-raw = dbutils.secrets.get(scope_name, secret_key)
-parts = raw.split("[###]")
+site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:{site_path}"
+site_resp = requests.get(site_url, headers=headers)
 
-print("Numero de partes:", len(parts))
-print("Longitudes:", [len(p) for p in parts])
-
-client_secret = parts[0]
-client_id = parts[1]
-tenant_id = "35595a02-4d6d-44ac-99e1-f9ab4cd872db"
-
-authority = f"https://login.microsoftonline.com/{tenant_id}"
-
-app = msal.ConfidentialClientApplication(
-    client_id=client_id,
-    client_credential=client_secret,
-    authority=authority
-)
-
-result = app.acquire_token_for_client(
-    scopes=["https://graph.microsoft.com/.default"]
-)
-
-print(result.keys())
-
-if "access_token" in result:
-    print("Token Graph obtenido")
-else:
-    print("Error al obtener token")
-    print(result)
+print("STATUS:", site_resp.status_code)
+print(site_resp.text)
