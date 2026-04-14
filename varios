@@ -1,13 +1,12 @@
-hostname = "santandernet.sharepoint.com"
-site_path = "/sites/CRST-BAU"
+import json
+import base64
 
-headers = {
-    "Authorization": f"Bearer {result['access_token']}",
-    "Content-Type": "application/json"
-}
+token = result["access_token"]
 
-site_url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:{site_path}"
-site_resp = requests.get(site_url, headers=headers)
+payload_b64 = token.split(".")[1]
+payload_b64 += "=" * (-len(payload_b64) % 4)
 
-print("STATUS:", site_resp.status_code)
-print(site_resp.text)
+claims = json.loads(base64.urlsafe_b64decode(payload_b64).decode("utf-8"))
+
+for k in ["aud", "iss", "tid", "appid", "roles", "scp"]:
+    print(f"{k}: {claims.get(k)}")
