@@ -1,3 +1,12 @@
+Compárame para cada business_unit y country la evolución de pt_provisions_pl_total entre escenarios S1, S2 y S3 durante el último report_date, mostrando además el ratio de cobertura (pt_total_reserves / pt_ead_s3) y el incremento porcentual de pt_loss_rate_s3 respecto a pt_loss_rate_s1.
+
+Filtra únicamente los registros con granularity_type = 'PORTFOLIO' y devuelve solo las 10 business units con mayor deterioro relativo de provisiones entre S1 y S3.
+
+
+
+
+
+
 description: |
   Dataset GOLD de stress testing y riesgo de crédito a nivel de business unit.
   
