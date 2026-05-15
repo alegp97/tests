@@ -1,62 +1,64 @@
-Compárame para cada business_unit y country la evolución de pt_provisions_pl_total entre escenarios S1, S2 y S3 durante el último report_date, mostrando además el ratio de cobertura (pt_total_reserves / pt_ead_s3) y el incremento porcentual de pt_loss_rate_s3 respecto a pt_loss_rate_s1.
+Design and implement a provider-agnostic AI metering and cost tracking layer for a ChatGPT-like application with frontend and backend.
 
-Filtra únicamente los registros con granularity_type = 'PORTFOLIO' y devuelve solo las 10 business units con mayor deterioro relativo de provisiones entre S1 y S3.
+Current provider is OpenAI using the OpenAI SDK, but the architecture must be extensible to Anthropic Claude, Google Gemini, Mistral, local models, embeddings, image generation, audio transcription, OCR, vector database calls, web search tools, and future AI providers.
 
+Requirements:
 
+1. Introduce an AI Gateway / LLM Router layer so the application never calls the OpenAI SDK directly from business logic.
+2. Create provider adapters:
+   - OpenAIAdapter initially
+   - interface ready for AnthropicAdapter, GeminiAdapter, LocalModelAdapter
+3. Implement Usage Metering:
+   - capture estimated input usage before the request when possible
+   - capture actual usage after provider response
+   - store usage by tenant_id, user_id, case_id, chat_id, message_id, provider, model, request_id
+4. Implement a generic UsageUnit abstraction:
+   - unit_type: input_tokens, output_tokens, cached_input_tokens, reasoning_tokens, image_tokens, audio_seconds, ocr_pages, tool_calls, vector_db_reads, embedding_tokens, etc.
+   - quantity
+   - billable_quantity
+   - metadata
+5. Implement Pricing Engine:
+   - prices configurable in database or JSON
+   - support provider, model, unit_type, price_per_unit, currency, valid_from, valid_to
+   - calculate estimated cost and final cost
+   - support cached tokens, discounted tokens, free quota, custom tenant markup
+6. Persist:
+   - AIRequest
+   - AIUsageEvent
+   - AICostEvent
+   - AIModelPricing
+   - optional Budget records per user, tenant, case and project
+7. Add budget controls:
+   - warn when estimated request cost exceeds threshold
+   - block when user/case/tenant monthly budget is exceeded
+   - expose usage summaries to frontend
+8. Add API endpoints:
+   - GET /ai/usage/chat/{chat_id}
+   - GET /ai/usage/case/{case_id}
+   - GET /ai/usage/user/{user_id}
+   - GET /ai/usage/tenant/{tenant_id}
+   - GET /ai/pricing/models
+9. Frontend:
+   - show estimated cost before sending, when available
+   - show actual cost after response
+   - show total cost by chat/case
+   - show token breakdown
+10. Engineering constraints:
+   - clean separation of concerns
+   - no provider-specific logic in frontend
+   - no OpenAI-specific usage model leaking into business logic
+   - fully typed DTOs/interfaces
+   - unit tests for pricing engine and adapters
+   - integration test with mocked OpenAI response
+   - migration scripts for database schema
 
-
-
-
-description: |
-  Dataset GOLD de stress testing y riesgo de crédito a nivel de business unit.
-  
-  Esta tabla contiene métricas agregadas y drivers utilizados en ejercicios de stress test,
-  provisiones, EAD, LGD, PD, pérdidas esperadas y reservas bajo distintos escenarios (S1, S2, S3).
-  
-  El dataset permite consultar información financiera y de riesgo por:
-    - business_unit
-    - país (country)
-    - granularidad
-    - fecha de reporte / corte
-    - escenario de estrés
-    
-  Principales grupos de variables:
-  
-    - ca_* : métricas de capital / reservas agregadas
-    - fi_* : métricas financieras
-    - if_* : inputs y factores IFRS9 (PD, LGD, etc.)
-    - lc_* : pérdidas y provisiones lifecycle
-    - ld_* : parámetros y ajustes LGD
-    - pd_* : parámetros PD
-    - pt_* : métricas principales de stress testing:
-        * EAD
-        * LGD
-        * PD
-        * default rate
-        * loss rate
-        * provisions P&L
-        * reserves
-        * write-offs
-        * maturities
-        * cash flows
-    - rc_* : calendarios y porcentajes regulatorios
-    - ru_* : métricas de uso y exposición
-    - sg_* : overlays y shifting experts
-    
-  Convenciones:
-    - s1, s2, s3 representan distintos escenarios de estrés
-    - *_wo corresponde a write-offs
-    - *_ttc corresponde a through-the-cycle
-    - *_pl corresponde a profit & loss
-    - *_ead corresponde a Exposure at Default
-    - *_lgd corresponde a Loss Given Default
-    - *_pd corresponde a Probability of Default
-    
-  El agente puede utilizar este dataset para:
-    - análisis de evolución de provisiones
-    - comparación entre escenarios
-    - análisis por business unit o país
-    - consultas de métricas de riesgo
-    - explicación de drivers de stress test
-    - validaciones de comportamiento PD/LGD/EAD
-    - análisis temporal y tendencias
+Deliver:
+- Proposed folder structure
+- Database schema/migrations
+- Type/interface definitions
+- OpenAIAdapter implementation
+- PricingEngine implementation
+- UsageMeteringService implementation
+- API endpoints
+- Frontend usage/cost display components
+- Tests
