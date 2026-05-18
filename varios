@@ -1,64 +1,184 @@
-Design and implement a provider-agnostic AI metering and cost tracking layer for a ChatGPT-like application with frontend and backend.
+Necesito refactorizar y completar el sistema de pricing/cost tracking de una app tipo ChatGPT con frontend y backend, usando proveedores/modelos como OpenAI.
 
-Current provider is OpenAI using the OpenAI SDK, but the architecture must be extensible to Anthropic Claude, Google Gemini, Mistral, local models, embeddings, image generation, audio transcription, OCR, vector database calls, web search tools, and future AI providers.
+Contexto:
+Actualmente tenemos un JSON/lista de modelos con esta estructura aproximada:
 
-Requirements:
+[
+  {
+    "provider": "openai",
+    "model": "gpt-4-turbo",
+    "prices": [
+      { "unit_type": "input_tokens", "price_per_unit": "0.00001", "currency": "USD" },
+      { "unit_type": "output_tokens", "price_per_unit": "0.00003", "currency": "USD" }
+    ]
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-3.5-turbo",
+    "prices": [
+      { "unit_type": "input_tokens", "price_per_unit": "0.0000005", "currency": "USD" },
+      { "unit_type": "output_tokens", "price_per_unit": "0.0000015", "currency": "USD" }
+    ]
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "prices": [
+      { "unit_type": "input_tokens", "price_per_unit": "0.000005", "currency": "USD", "is_cached_variant": false },
+      { "unit_type": "cached_input_tokens", "price_per_unit": "0.0000005", "currency": "USD", "is_cached_variant": true },
+      { "unit_type": "output_tokens", "price_per_unit": "0.00003", "currency": "USD", "is_cached_variant": false }
+    ]
+  }
+]
 
-1. Introduce an AI Gateway / LLM Router layer so the application never calls the OpenAI SDK directly from business logic.
-2. Create provider adapters:
-   - OpenAIAdapter initially
-   - interface ready for AnthropicAdapter, GeminiAdapter, LocalModelAdapter
-3. Implement Usage Metering:
-   - capture estimated input usage before the request when possible
-   - capture actual usage after provider response
-   - store usage by tenant_id, user_id, case_id, chat_id, message_id, provider, model, request_id
-4. Implement a generic UsageUnit abstraction:
-   - unit_type: input_tokens, output_tokens, cached_input_tokens, reasoning_tokens, image_tokens, audio_seconds, ocr_pages, tool_calls, vector_db_reads, embedding_tokens, etc.
-   - quantity
-   - billable_quantity
-   - metadata
-5. Implement Pricing Engine:
-   - prices configurable in database or JSON
-   - support provider, model, unit_type, price_per_unit, currency, valid_from, valid_to
-   - calculate estimated cost and final cost
-   - support cached tokens, discounted tokens, free quota, custom tenant markup
-6. Persist:
-   - AIRequest
-   - AIUsageEvent
-   - AICostEvent
-   - AIModelPricing
-   - optional Budget records per user, tenant, case and project
-7. Add budget controls:
-   - warn when estimated request cost exceeds threshold
-   - block when user/case/tenant monthly budget is exceeded
-   - expose usage summaries to frontend
-8. Add API endpoints:
-   - GET /ai/usage/chat/{chat_id}
-   - GET /ai/usage/case/{case_id}
-   - GET /ai/usage/user/{user_id}
-   - GET /ai/usage/tenant/{tenant_id}
-   - GET /ai/pricing/models
-9. Frontend:
-   - show estimated cost before sending, when available
-   - show actual cost after response
-   - show total cost by chat/case
-   - show token breakdown
-10. Engineering constraints:
-   - clean separation of concerns
-   - no provider-specific logic in frontend
-   - no OpenAI-specific usage model leaking into business logic
-   - fully typed DTOs/interfaces
-   - unit tests for pricing engine and adapters
-   - integration test with mocked OpenAI response
-   - migration scripts for database schema
+Objetivo:
+Quiero que todo el sistema trabaje internamente con `price_per_unit` expresado como precio por token individual, no por 1M tokens. Es decir:
 
-Deliver:
-- Proposed folder structure
-- Database schema/migrations
-- Type/interface definitions
-- OpenAIAdapter implementation
-- PricingEngine implementation
-- UsageMeteringService implementation
-- API endpoints
-- Frontend usage/cost display components
-- Tests
+cost = tokens * price_per_unit
+
+La fuente de precios puede venir expresada como precio por 1M tokens, pero debe convertirse antes de guardarse o usarse:
+
+price_per_token = price_per_1M_tokens / 1_000_000
+
+Quiero que revises el código del proyecto y hagas los cambios necesarios para que el pricing sea limpio, extensible y auditable.
+
+Requisitos funcionales:
+
+1. Mantener una definición clara de precios por proveedor/modelo.
+   - Cada modelo debe tener:
+     - provider
+     - model
+     - prices
+   - Cada price debe tener:
+     - unit_type
+     - price_per_unit
+     - currency
+     - opcionalmente is_cached_variant
+     - opcionalmente notes/source/billing metadata
+
+2. Soportar como mínimo estos unit_type:
+   - input_tokens
+   - cached_input_tokens
+   - output_tokens
+
+3. El cálculo de coste debe ser genérico.
+   No hardcodear modelos concretos dentro del cálculo.
+
+   Debe permitir algo como:
+
+   input_tokens * input_price
+   + cached_input_tokens * cached_input_price
+   + output_tokens * output_price
+
+4. Si un modelo no tiene `cached_input_tokens`, el sistema debe ignorar ese componente o tratarlo como 0, sin romper.
+
+5. No mezclar precios por millón y precios por token en el cálculo.
+   El cálculo final siempre debe usar `price_per_unit` como precio por token.
+
+6. Añadir metadatos para evitar ambigüedad:
+   - `unit_basis`: "per_token"
+   - opcionalmente `source_basis`: "per_1M_tokens"
+   - opcionalmente `source_url`
+   - opcionalmente `effective_from`
+   - opcionalmente `notes`
+
+7. Usar Decimal o equivalente para evitar errores de precisión monetaria.
+   No usar floats para dinero si el lenguaje/framework lo permite.
+
+8. Añadir validaciones:
+   - provider requerido
+   - model requerido
+   - unit_type requerido
+   - currency requerido
+   - price_per_unit requerido y numérico
+   - price_per_unit >= 0
+   - no duplicar unit_type dentro del mismo modelo salvo que haya alguna dimensión explícita que lo justifique
+   - unit_basis debe ser "per_token"
+
+9. Añadir tests unitarios para:
+   - cálculo básico con input/output
+   - cálculo con cached_input_tokens
+   - cálculo sin cached_input_tokens aunque el usage lo traiga
+   - modelo inexistente
+   - unit_type inexistente
+   - precios con muchos decimales
+   - coste cero si tokens = 0
+   - validación de formato de pricing
+
+10. Si existe tracking por conversación/caso/mensaje, integrar el cálculo sin acoplarlo demasiado.
+    La idea futura es poder calcular coste a nivel de:
+    - tenant
+    - user
+    - case
+    - conversation
+    - message
+    - agent/tool run
+
+11. Diseñar la solución pensando en extensibilidad futura:
+    - otros proveedores
+    - otros modelos
+    - otros tipos de unidad
+    - precios por herramientas
+    - precios por embeddings
+    - precios por audio
+    - precios por imagen
+    - precios por razonamiento/cached tokens si el proveedor los devuelve
+
+12. Añadir una función helper para convertir precios publicados por millón de tokens a precio por token, por ejemplo:
+
+   convertPerMillionToPerToken(pricePerMillion) = pricePerMillion / 1_000_000
+
+   Pero el cálculo operativo debe usar siempre precios ya normalizados por token.
+
+13. Donde se registre el usage real de OpenAI, mapear correctamente los campos devueltos por la API al sistema interno.
+    Ejemplo:
+    - prompt/input tokens -> input_tokens
+    - cached prompt tokens -> cached_input_tokens
+    - completion/output tokens -> output_tokens
+
+14. Revisar nombres para que sean consistentes:
+    - evitar mezclar `input`, `prompt`, `completion`, `output` sin una capa clara de normalización
+    - internamente usar nombres canónicos:
+      - input_tokens
+      - cached_input_tokens
+      - output_tokens
+
+15. Entregar los cambios de forma limpia:
+    - código refactorizado
+    - tests
+    - comentarios mínimos donde aporten claridad
+    - documentación breve en README o comentario central explicando:
+      - los precios se guardan por token
+      - los precios publicados por 1M tokens se dividen entre 1_000_000
+      - fórmula de cálculo
+      - ejemplo con gpt-5.5
+
+Ejemplo esperado de cálculo:
+
+Pricing:
+input_tokens = 0.000005 USD/token
+cached_input_tokens = 0.0000005 USD/token
+output_tokens = 0.00003 USD/token
+
+Usage:
+input_tokens = 1000
+cached_input_tokens = 500
+output_tokens = 200
+
+Cost:
+1000 * 0.000005
++ 500 * 0.0000005
++ 200 * 0.00003
+= 0.005 + 0.00025 + 0.006
+= 0.01125 USD
+
+Importante:
+No inventes precios nuevos. Usa los precios que ya existan en la configuración y solo normaliza/refactoriza la lógica. Si ves precios hardcodeados en varios sitios, centralízalos. Si encuentras inconsistencias, márcalas claramente y propón una estructura única.
+
+Antes de tocar muchas cosas, inspecciona el proyecto y dime brevemente:
+1. dónde está ahora la configuración de modelos/precios,
+2. dónde se calcula actualmente el coste,
+3. dónde se registra el usage/tokens,
+4. qué cambios vas a hacer.
+
+Luego implementa.
