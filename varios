@@ -1,1 +1,8 @@
-Ajusta el tracking de usage para GPT-5.5 / Responses API: captura reasoning_tokens principalmente desde usage.output_tokens_details.reasoning_tokens, manteniendo fallback a usage.completion_tokens_details.reasoning_tokens por compatibilidad. No trates 0 como None: si el campo existe y vale 0, debe mostrarse como 0, no como "--". Para costes, usa usage.output_tokens como total facturable de salida, porque ya incluye tokens visibles + reasoning tokens; no sumes reasoning_tokens de nuevo para evitar doble conteo. En el front, muestra reasoning_tokens como desglose informativo y renderiza "--" solo cuando el campo no exista realmente.
+dbutils.fs.ls("/mnt/data")
+dbutils.widgets.text("fecha", "")
+dbutils.secrets.get("scope", "key")
+
+
+databricks fs ls dbfs:/mnt/data
+databricks jobs run-now 123
+databricks bundle deploy
