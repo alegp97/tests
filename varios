@@ -1,8 +1,652 @@
-dbutils.fs.ls("/mnt/data")
-dbutils.widgets.text("fecha", "")
-dbutils.secrets.get("scope", "key")
+- Skills actuales:
+  - SQL sobre Oracle.
+  - `list_tables`
+  - `describe_table`
+  - `run_select`
+  - `list_documents`
+  - `web_search_preview` hospedado por OpenAI.
+  - Code Interpreter para hojas Excel.
+- Seguridad actual:
+  - Catálogo SQL en `agent/config/sql_catalog.yaml`.
+  - Whitelist de schemas/tablas.
+  - Validación con `sqlglot`.
+  - Solo se permiten consultas `SELECT`.
+  - Se rechazan operaciones peligrosas: `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `ALTER`, etc.
+  - Identificadores Oracle validados por regex.
+  - Valores de filtros siempre como bind params.
+  - Límite de filas mediante `FETCH FIRST N ROWS ONLY`.
+  - Presupuesto de iteraciones con `IterationBudget`.
+  - Truncado de outputs.
+  - Wrapper de errores.
+  - Trazabilidad paso a paso del bucle de tools.
 
+Arquitectura actual aproximada
+==============================
 
-databricks fs ls dbfs:/mnt/data
-databricks jobs run-now 123
-databricks bundle deploy
+Flujo actual:
+1. `Agent.send_message` persiste el mensaje del usuario.
+2. Monta historial con `_build_messages`.
+3. Arranca turno con `LLMClient.run_turn`.
+4. El `system_prompt` ya incluye la sección de skills gracias a `_build_system_prompt`.
+5. El modelo conoce tools como:
+   - `list_tables`
+   - `describe_table`
+   - `run_select`
+   - fixed queries.
+6. `LLMClient.run_turn` implementa el bucle de function calling:
+   - Envía schemas de tools con `registry.collect_schemas()`.
+   - Mientras `finish_reason == "tool_calls"` y queda presupuesto:
+     - Por cada `tool_call`, llama a `registry.dispatch(fn_name, fn_args)`.
+     - Trunca output.
+     - Añade mensaje `role: "tool"` con su `tool_call_id`.
+     - Vuelve a llamar al modelo con historial actualizado.
+7. `registry.dispatch` parsea `args_json`, busca tool en `_tool_index` y llama al handler real.
+8. La skill SQL se registra desde `agent/tools/__init__.py`.
+9. `SqlSkill` tiene el engine Oracle resuelto perezosamente con `get_engine()` y `lru_cache`.
+10. El engine SQLAlchemy usa `pool_pre_ping=True` y conexiones cortas con `with engine.connect()`.
+
+Tools SQL actuales
+==================
+
+Actualmente existen tres tools básicas:
+
+1. `list_tables(schema, name_filter?, limit)`
+   - Consulta el diccionario de datos Oracle:
+     ```sql
+     SELECT TABLE_NAME, NUM_ROWS
+     FROM ALL_TABLES
+     WHERE OWNER = :owner
+       AND TABLE_NAME LIKE :name_filter
+     ORDER BY TABLE_NAME
+     FETCH FIRST :limit ROWS ONLY
+     ```
+   - Verifica que el schema esté permitido con `is_schema_allowed`.
+
+2. `describe_table(table, schema?)`
+   - Resuelve `SCHEMA.TABLE`.
+   - Consulta:
+     ```sql
+     SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+     FROM ALL_TAB_COLUMNS
+     WHERE OWNER = :owner
+       AND TABLE_NAME = :tbl
+     ORDER BY COLUMN_ID
+     ```
+
+3. `run_select(table, schema?, columns?, filters?, limit)`
+   - Es la única que toca datos de negocio actualmente.
+   - Resuelve schema/tabla.
+   - Comprueba whitelist.
+   - Valida que schema, tabla y columnas sean identificadores Oracle simples.
+   - Si no se piden columnas, usa `*` o expande catálogo.
+   - Construye:
+     ```sql
+     SELECT ...
+     FROM SCHEMA.TABLA
+     WHERE col = :p_i ...
+     FETCH FIRST N ROWS ONLY
+     ```
+   - Pasa SQL por `validate_select`.
+   - Ejecuta con bind params.
+   - Devuelve lista de dicts.
+
+Problema actual
+===============
+
+Ahora necesitamos soportar consultas SQL avanzadas:
+- Joins.
+- Subconsultas.
+- CTEs con `WITH`.
+- Agregaciones.
+- `GROUP BY`.
+- `HAVING`.
+- `ORDER BY`.
+- Window functions.
+- Filtros complejos.
+- Queries multi-tabla reales.
+- Consultas analíticas sobre datos Oracle.
+
+Pero queremos mantener las garantías de seguridad:
+- Nada que no sea lectura.
+- Nada de DDL/DML.
+- No permitir múltiples sentencias.
+- No permitir acceso a schemas/tablas fuera del catálogo.
+- No concatenar valores de usuario.
+- Forzar límite de filas.
+- Mantener trazabilidad.
+- Mantener compatibilidad con entorno corporativo air-gapped.
+
+Objetivo de esta tarea
+======================
+
+Quiero que analices el proyecto y propongas/implementes una solución robusta para lanzar queries avanzadas de solo lectura sobre Oracle.
+
+La solución preferida es crear una nueva tool avanzada, por ejemplo:
+
+```python
+run_advanced_select(
+    sql: str,
+    params: dict | None = None,
+    limit: int = 100,
+    explain_only: bool = False
+)
+
+o un nombre equivalente si encaja mejor con la arquitectura existente.
+
+NO quiero romper run_select.
+run_select debe seguir existiendo para consultas simples.
+La nueva tool debe cubrir casos complejos.
+
+Referencia conceptual
+
+El diseño debe seguir esta idea:
+
+OpenAI function calling/tools:
+El LLM puede generar una llamada estructurada a una tool.
+La aplicación no debe confiar ciegamente en el SQL generado.
+La capa backend debe validar y acotar antes de ejecutar.
+Oracle SQL:
+SELECT permite consultar una o varias tablas, vistas o subqueries.
+JOIN combina filas de dos o más tablas/vistas.
+WITH permite CTEs.
+FETCH FIRST N ROWS ONLY permite limitar resultados.
+SQLAlchemy:
+Ejecutar SQL textual con text(sql).
+Usar bind params con :param.
+Nunca interpolar valores de usuario en el SQL.
+Mantener engine.connect() y conexiones cortas.
+sqlglot:
+Parsear SQL con dialecto Oracle.
+Inspeccionar AST.
+Detectar tipo de statement.
+Extraer tablas referenciadas.
+Rechazar nodos/patrones peligrosos.
+Validar que todas las tablas pertenezcan a schemas/tablas permitidas.
+Tareas concretas
+Inspecciona la arquitectura actual
+
+Localiza los archivos relevantes, probablemente:
+
+agent/tools/sql.py
+agent/tools/_sql_validator.py
+agent/tools/_registry.py
+agent/tools/__init__.py
+agent/config/sql_catalog.yaml
+agent/core/llm_client.py
+agent/core/agent.py
+backend FastAPI si afecta al endpoint /chat.
+tests existentes.
+
+Explica brevemente:
+
+Cómo se registran tools.
+Cómo se construyen schemas de tools.
+Cómo se ejecutan.
+Cómo se valida SQL actualmente.
+Qué parte conviene reutilizar.
+Diseña la nueva tool avanzada
+
+Añade una nueva tool para SQL avanzado de solo lectura.
+
+Propuesta de firma:
+
+@tool
+def run_advanced_select(
+    sql: str,
+    params: dict[str, Any] | None = None,
+    limit: int = 100,
+    explain_only: bool = False
+) -> list[dict[str, Any]] | dict[str, Any]:
+    ...
+
+Comportamiento esperado:
+
+Acepta SQL Oracle completo de solo lectura.
+Permite:
+SELECT ...
+WITH ... SELECT ...
+JOIN
+subqueries.
+agregaciones.
+GROUP BY
+HAVING
+ORDER BY
+funciones analíticas/window functions si sqlglot las parsea correctamente.
+Rechaza:
+múltiples statements.
+comentarios sospechosos si se considera necesario.
+DDL.
+DML.
+MERGE.
+CALL.
+EXEC.
+PL/SQL blocks.
+BEGIN ... END.
+CREATE, DROP, ALTER, TRUNCATE.
+INSERT, UPDATE, DELETE.
+GRANT, REVOKE.
+cualquier statement que no sea SELECT o WITH cuyo cuerpo final sea SELECT.
+Validación con sqlglot
+
+Implementa o mejora un validador específico, por ejemplo:
+
+validate_advanced_select(sql: str, allowed_catalog: Catalog) -> ParsedQueryInfo
+
+Debe:
+
+Parsear con sqlglot.parse(sql, read="oracle").
+Exigir exactamente una expresión parseada.
+Confirmar que la expresión raíz sea Select o With/Select.
+Extraer todas las tablas reales referenciadas.
+Ignorar aliases y CTE names al validar tablas reales.
+Validar que cada tabla:
+tenga schema explícito, o bien se pueda resolver de forma segura.
+pertenezca al catálogo permitido.
+esté permitida por whitelist.
+Rechazar referencias a schemas no permitidos.
+Rechazar tablas no permitidas.
+Rechazar identificadores con caracteres peligrosos.
+Devolver metadatos útiles:
+tablas detectadas.
+schemas detectados.
+si tiene limit/fetch.
+si tiene order by.
+tipo de statement.
+
+Atención especial:
+
+En CTEs, el nombre de la CTE no debe confundirse con una tabla real.
+En subqueries, sí hay que validar las tablas internas.
+En joins, validar ambos lados.
+En schema.table alias, validar schema/table y no el alias.
+En table alias sin schema, decidir política:
+opción segura preferida: exigir schema explícito para run_advanced_select.
+alternativa: resolver si la tabla aparece de forma unívoca en el catálogo.
+
+Mi preferencia:
+
+Para SQL avanzado, exigir schema explícito en todas las tablas reales.
+Solo relajar esto si el catálogo resuelve de forma inequívoca.
+Limitación de filas
+
+La tool debe aceptar limit, pero de forma segura.
+
+Reglas:
+
+limit debe tener un máximo configurable, por ejemplo MAX_ADVANCED_SELECT_LIMIT = 1000.
+Si el usuario pide más, caparlo o rechazarlo.
+Si la query no tiene FETCH FIRST, añadir un wrapper externo:
+SELECT *
+FROM (
+    <query_original_sin_punto_y_coma>
+)
+FETCH FIRST :__limit ROWS ONLY
+
+o una forma equivalente compatible con Oracle.
+
+Preferencia:
+
+No modificar internamente una query compleja de manera frágil.
+Mejor envolverla como subquery externa.
+Cuidado con ORDER BY: si la query original tiene ORDER BY, debe conservarse dentro del wrapper.
+Quitar ; final si existe.
+Añadir bind param interno __limit.
+Evitar colisión si el usuario ya trae un param llamado __limit; en ese caso usar otro nombre seguro o rechazar.
+Bind params
+
+La tool debe recibir:
+
+{
+  "sql": "SELECT ... WHERE fecha >= :from_date AND amount > :min_amount",
+  "params": {
+    "from_date": "2025-01-01",
+    "min_amount": 1000
+  },
+  "limit": 100
+}
+
+Reglas:
+
+Nunca concatenar valores.
+Ejecutar con sqlalchemy.text(final_sql) y params.
+Validar nombres de params con regex segura:
+^[A-Za-z_][A-Za-z0-9_]*$
+Rechazar params no dict.
+Rechazar objetos raros/no serializables.
+Permitir tipos simples:
+str
+int
+float
+bool
+date/datetime si ya existen en el proyecto.
+None.
+Opcional:
+listas solo si se implementa expanding bind correctamente.
+si no se implementa, rechazar listas de momento.
+
+Importante:
+
+Si la query contiene placeholders que no están en params, devolver error claro.
+Si params trae claves no usadas, decidir si:
+advertir.
+rechazar.
+ignorar.
+Preferencia: rechazar para evitar confusiones.
+Modo explain/dry-run
+
+Añade explain_only.
+
+Si explain_only=True, no debe devolver datos de negocio.
+Puede devolver:
+
+SQL final validado.
+tablas detectadas.
+parámetros esperados.
+límite aplicado.
+quizá EXPLAIN PLAN si es viable y seguro en Oracle.
+Si no se implementa EXPLAIN PLAN real, basta con dry-run lógico.
+
+No debe tocar datos de negocio.
+
+Tool schema y prompt del sistema
+
+Actualiza el schema/descripción de la tool para que el LLM sepa usarla bien.
+
+La descripción debe decir algo como:
+
+Usa run_select para consultas simples a una sola tabla.
+Usa run_advanced_select para joins, CTEs, subqueries, agregaciones o consultas analíticas.
+Siempre genera SQL Oracle.
+Siempre usa bind params para valores.
+Siempre usa schemas explícitos.
+No hagas DDL/DML.
+No pidas más columnas de las necesarias.
+Usa limit razonable.
+Para explorar, primero usa list_tables y describe_table.
+
+También conviene ajustar el system prompt de skills si existe una sección textual.
+
+Ejemplos que deben funcionar
+
+La tool debe poder manejar casos como estos:
+
+Ejemplo 1: join simple
+
+SELECT
+    c.CLIENT_ID,
+    c.CLIENT_NAME,
+    o.ORDER_ID,
+    o.AMOUNT
+FROM DEDJAN.CLIENTES c
+JOIN DEDJAN.ORDERS o
+    ON o.CLIENT_ID = c.CLIENT_ID
+WHERE o.AMOUNT > :min_amount
+ORDER BY o.AMOUNT DESC
+
+Params:
+
+{
+  "min_amount": 1000
+}
+
+Ejemplo 2: CTE
+
+WITH recent_orders AS (
+    SELECT
+        ORDER_ID,
+        CLIENT_ID,
+        AMOUNT,
+        CREATED_AT
+    FROM DEDJAN.ORDERS
+    WHERE CREATED_AT >= :from_date
+)
+SELECT
+    c.CLIENT_ID,
+    c.CLIENT_NAME,
+    COUNT(ro.ORDER_ID) AS NUM_ORDERS,
+    SUM(ro.AMOUNT) AS TOTAL_AMOUNT
+FROM DEDJAN.CLIENTES c
+JOIN recent_orders ro
+    ON ro.CLIENT_ID = c.CLIENT_ID
+GROUP BY
+    c.CLIENT_ID,
+    c.CLIENT_NAME
+HAVING SUM(ro.AMOUNT) > :min_total
+ORDER BY TOTAL_AMOUNT DESC
+
+Params:
+
+{
+  "from_date": "2025-01-01",
+  "min_total": 5000
+}
+
+Ejemplo 3: subquery
+
+SELECT
+    c.CLIENT_ID,
+    c.CLIENT_NAME
+FROM DEDJAN.CLIENTES c
+WHERE c.CLIENT_ID IN (
+    SELECT o.CLIENT_ID
+    FROM DEDJAN.ORDERS o
+    WHERE o.AMOUNT > :min_amount
+)
+
+Params:
+
+{
+  "min_amount": 1000
+}
+
+Ejemplo 4: window function
+
+SELECT
+    o.CLIENT_ID,
+    o.ORDER_ID,
+    o.AMOUNT,
+    ROW_NUMBER() OVER (
+        PARTITION BY o.CLIENT_ID
+        ORDER BY o.AMOUNT DESC
+    ) AS RN
+FROM DEDJAN.ORDERS o
+WHERE o.CREATED_AT >= :from_date
+
+Params:
+
+{
+  "from_date": "2025-01-01"
+}
+Ejemplos que deben rechazarse
+
+Debe rechazar claramente:
+
+DELETE FROM DEDJAN.CLIENTES WHERE CLIENT_ID = :id
+DROP TABLE DEDJAN.CLIENTES
+SELECT * FROM DEDJAN.CLIENTES; DELETE FROM DEDJAN.CLIENTES
+BEGIN
+  EXECUTE IMMEDIATE 'DROP TABLE DEDJAN.CLIENTES';
+END;
+SELECT * FROM SYS.USER$
+SELECT * FROM OTHER_SCHEMA.SECRET_TABLE
+SELECT * FROM DEDJAN.CLIENTES WHERE CLIENT_ID = 123
+
+Este último caso puede ser permitido sintácticamente, pero preferimos que el LLM use bind params. Valora si se debe rechazar literales directos en filtros o simplemente recomendar bind params. Para máxima seguridad, implementa una política configurable:
+
+REQUIRE_BINDS_FOR_FILTER_LITERALS = True/False.
+Tests
+
+Añade tests unitarios.
+
+Cubrir al menos:
+
+SELECT simple válido.
+WITH ... SELECT válido.
+JOIN válido.
+Subquery válida.
+Agregación válida.
+Window function válida si sqlglot lo soporta en nuestro entorno.
+Tabla fuera de catálogo.
+Schema fuera de catálogo.
+CTE no confundida con tabla real.
+Múltiples statements rechazados.
+DDL rechazado.
+DML rechazado.
+PL/SQL rechazado.
+Params faltantes.
+Params extra.
+Nombre de param inválido.
+Limit mayor al máximo.
+Query sin FETCH FIRST: se envuelve correctamente.
+Query con FETCH FIRST: no duplica límite o aplica política clara.
+explain_only=True no ejecuta datos.
+
+Si hay tests existentes para run_select, no romperlos.
+
+Backward compatibility
+
+No rompas:
+
+CLI/REPL.
+Endpoint /chat.
+Streaming NDJSON.
+Persistencia de mensajes.
+Skills existentes.
+sql_catalog.yaml.
+Migraciones.
+Compatibilidad air-gapped.
+Registro actual de tools.
+Entregable esperado
+
+Quiero que entregues:
+
+A) Diagnóstico breve:
+
+Qué archivos has tocado.
+Qué patrón actual has reutilizado.
+Qué riesgo principal has encontrado.
+
+B) Implementación:
+
+Nueva tool run_advanced_select o equivalente.
+Validador SQL avanzado.
+Integración en registry/skills.
+Descripción/schema de tool.
+Tests.
+
+C) Explicación de uso:
+
+Cuándo usar run_select.
+Cuándo usar run_advanced_select.
+Ejemplos reales de tool call.
+Ejemplos de errores esperados.
+
+D) Seguridad:
+
+Lista explícita de garantías implementadas.
+Lista de limitaciones conocidas.
+Qué queda pendiente para producción.
+Criterios de aceptación
+
+La solución se considera correcta si:
+
+El agente puede responder preguntas tipo:
+“Muéstrame clientes con más de X operaciones desde una fecha”
+usando WITH, JOIN, GROUP BY y bind params.
+El agente puede hacer:
+list_tables
+describe_table
+run_advanced_select
+Una query con DROP, DELETE, UPDATE, INSERT, MERGE, ALTER, CREATE, TRUNCATE, BEGIN, CALL o múltiples sentencias es rechazada antes de llegar a Oracle.
+Todas las tablas reales referenciadas en joins, subqueries y CTEs son validadas contra catálogo.
+La query se ejecuta con SQLAlchemy text() y bind params.
+Se fuerza un límite máximo de filas.
+La tool devuelve errores claros al usuario/modelo, sin stack traces crudos.
+Los tests pasan.
+Sugerencia de implementación
+
+Estructura orientativa:
+
+agent/
+  tools/
+    sql.py
+    _sql_validator.py
+    _advanced_sql_validator.py   # si prefieres separarlo
+    _oracle_client.py
+    _registry.py
+  config/
+    sql_catalog.yaml
+tests/
+  test_advanced_sql_validator.py
+  test_sql_skill_advanced_select.py
+
+Posible dataclass:
+
+@dataclass(frozen=True)
+class AdvancedQueryValidation:
+    original_sql: str
+    normalized_sql: str
+    final_sql: str
+    tables: list[str]
+    params_required: set[str]
+    limit_applied: int
+    has_fetch: bool
+
+Posibles funciones:
+
+def validate_advanced_select(
+    sql: str,
+    catalog: SqlCatalog,
+    *,
+    require_schema: bool = True,
+    max_limit: int = 1000,
+) -> AdvancedQueryValidation:
+    ...
+def apply_outer_limit(sql: str, limit: int) -> tuple[str, dict[str, Any]]:
+    ...
+def extract_table_references(expression: sqlglot.Expression) -> list[TableRef]:
+    ...
+def extract_bind_params(sql: str) -> set[str]:
+    ...
+def validate_params(
+    required: set[str],
+    provided: dict[str, Any],
+) -> dict[str, Any]:
+    ...
+
+Ten cuidado con:
+
+CTE names.
+Aliases.
+Quoted identifiers.
+Semicolon final.
+Comentarios.
+Parámetros tipo :from_date.
+Colisiones con __limit.
+FETCH FIRST existente.
+Queries con ORDER BY.
+Errores de parseo de sqlglot.
+Política recomendada
+
+Para primera versión robusta:
+
+Exigir schema explícito en SQL avanzado.
+No permitir quoted identifiers inicialmente.
+No permitir varias sentencias.
+No permitir listas en params inicialmente.
+No intentar autogenerar joins.
+No permitir SQL libre sin validación.
+No ejecutar EXPLAIN PLAN real si complica la seguridad; hacer explain_only lógico.
+Mantener la tool simple y segura antes que demasiado flexible.
+Resultado deseado
+
+Quiero que conviertas el asistente de “solo puede hacer SELECT simple sobre una tabla” a “puede hacer analítica SQL real sobre Oracle mediante joins, CTEs y subqueries”, sin perder las garantías corporativas de seguridad y trazabilidad.
+
+Trabaja de forma incremental:
+
+Primero inspecciona.
+Luego implementa validador.
+Luego tool.
+Luego tests.
+Luego ajusta prompt/schema.
+Finalmente resume cambios y cómo probarlo.
