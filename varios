@@ -1,171 +1,48 @@
-Actúa como EXAMINADOR TÉCNICO de la formación “Testing Intermedio en Spark”.
+- Resumen:
+El workflow de Deployment Delivery de los componentes EconomicResearch falla antes de ejecutar el job deploy_artifacts debido a que la matriz databricks_host no contiene ningún valor.
 
-Objetivo:
-Generar un examen tipo test de 20 preguntas basado en:
-1. La teoría de la formación de Testing Spark.
-2. Casuísticas reales encontradas en este repositorio, especialmente dentro del directorio de tests.
-3. Ejemplos concretos de mockeo, stubbing, spying, wrappers, deep stubs, Answers y pruebas sobre Spark/Scala.
+- URL:
+[Pegar aquí la URL de la ejecución Deployment Delivery #83]
 
-Antes de crear el examen, escanea en profundidad el proyecto:
+- Rama:
+main
 
-- Busca directorios como:
-  - test/
-  - tests/
-  - src/test/
-  - src/test/scala/
-  - src/test/java/
-  - src/test/python/
-  - cualquier carpeta que contenga Test, Spec, test_ o *_test.
+- Commit:
+73a7fee
 
-- Analiza especialmente ficheros:
-  - *Test.scala
-  - *Spec.scala
-  - *Test.java
-  - test_*.py
-  - *_test.py
-  - conftest.py
-  - fixtures
-  - clases auxiliares de testing
-  - wrappers usados para aislar Spark, FileSystem, SQLContext, SparkSession, HDFS, DBUtils, configuración o escritura.
+- Recurrencia:
+Se reproduce al relanzar manualmente el workflow.
 
-Temas obligatorios que debes detectar en el código si existen:
+- Bloqueo:
+El fallo impide continuar con el despliegue de los artefactos de EconomicResearch en el entorno correspondiente.
 
-- Uso de Mockito:
-  - mock(...)
-  - spy(...)
-  - when(...).thenReturn(...)
-  - doReturn(...).when(...)
-  - doNothing()
-  - doThrow()
-  - thenAnswer()
-  - verify(...)
-  - times(...)
-  - never()
-  - any(), eq(), ArgumentMatchers
-  - ArgumentCaptor
+- Última ejecución:
+Deployment Delivery #83, relanzada mediante workflow_dispatch.
 
-- Default Answers:
-  - RETURNS_DEFAULTS
-  - RETURNS_MOCKS
-  - RETURNS_SELF
-  - RETURNS_DEEP_STUBS
+- Problema:
+Durante la evaluación de la estrategia del job deploy_artifacts, el workflow reutilizable cd-multithirds-main-maven.yml intenta generar una matriz utilizando databricks_host, pero dicho vector llega vacío.
 
-- Mockeo de Spark:
-  - SparkSession
-  - SQLContext
-  - DataFrame
-  - Dataset
-  - Row
-  - Column
-  - DataFrameWriter
-  - DataFrameReader
-  - métodos encadenados como select, where, filter, distinct, join, groupBy, agg, withColumn, write, mode, format, option, save, saveAsTable.
-  - llamadas a sql(...)
-  - table(...)
-  - createDataFrame(...)
-  - collect()
-  - head()
-  - first()
-  - getAs[T](...)
+- Error mostrado:
+Error when evaluating 'strategy' for job 'deploy_artifacts'.
+cd-multithirds-main-maven.yml@v0.0.1 (Line: 171, Col: 26):
+Matrix vector 'databricks_host' does not contain any values.
 
-- Mockeo de frontera:
-  - FileSystem
-  - Path
-  - FSDataInputStream
-  - HDFS
-  - S3/ADLS/GCS si aparece
-  - configuración externa
-  - secrets
-  - lectura/escritura de tablas
-  - wrappers para evitar dependencias reales.
+- Pasos para reproducir:
+1. Acceder al workflow cd.yml.
+2. Lanzar o relanzar Deployment Delivery mediante workflow_dispatch.
+3. Esperar a que finalicen los pasos Setup environment, Setting Artifacts y Prepare Common Scripts.
+4. El job deploy_artifacts queda sin ejecutarse y la ejecución termina en estado Failure.
 
-- Uso de Spark real local:
-  - SparkSession.builder.master("local[*]" o "local[2]")
-  - tests con DataFrames sintéticos
-  - comparación de DataFrames
-  - fixtures de Spark
-  - cuándo conviene usar Spark real en local frente a mockear DataFrames.
+- Comportamiento esperado:
+El workflow debería obtener al menos un valor válido para databricks_host, generar la matriz de despliegue y ejecutar el job deploy_artifacts.
 
-Instrucciones para generar el examen:
+- Comportamiento actual:
+La matriz databricks_host se genera vacía y GitHub Actions detiene el workflow durante la evaluación de la estrategia.
 
-1. Crea exactamente 20 preguntas tipo test.
-2. Cada pregunta debe tener 4 opciones: A, B, C y D.
-3. Solo debe haber una respuesta correcta.
-4. Las preguntas deben estar basadas en casos reales encontrados en el código del repositorio.
-5. No hagas preguntas genéricas de teoría si puedes basarlas en una clase, método, patrón o test concreto del proyecto.
-6. Para cada pregunta, indica una referencia al caso real analizado:
-   - nombre del fichero
-   - clase o método de test
-   - técnica de mockeo detectada
-   - breve descripción del fragmento, sin pegar bloques enormes.
-7. Las preguntas deben mezclar:
-   - comprensión conceptual
-   - lectura de código
-   - identificación de errores
-   - elección de estrategia correcta de mockeo
-   - diferencias entre stub, mock y spy
-   - cuándo usar doReturn en lugar de when
-   - cuándo usar doNothing
-   - cuándo usar doThrow
-   - cuándo usar RETURNS_DEEP_STUBS
-   - riesgos de mockear DataFrames directamente
-   - ventajas de usar wrappers
-   - cuándo conviene usar SparkSession local en vez de mocks profundos
-   - verificación de interacciones con verify/times/never
-   - uso correcto de Answer para métodos dinámicos.
-8. El nivel debe ser intermedio/avanzado, orientado a desarrolladores Big Data que trabajan con Spark, ScalaTest y Mockito.
-9. Evita preguntas demasiado fáciles como “¿qué es un mock?” salvo que estén conectadas con un caso real del repositorio.
-10. Incluye al menos:
-   - 4 preguntas sobre Mockito básico/interacciones.
-   - 3 preguntas sobre Spy.
-   - 3 preguntas sobre doReturn/doNothing/doThrow.
-   - 3 preguntas sobre RETURNS_* y deep stubs.
-   - 3 preguntas sobre DataFrames/SparkSession/DataFrameWriter.
-   - 2 preguntas sobre wrappers o aislamiento de dependencias externas.
-   - 2 preguntas sobre cuándo NO mockear y usar Spark local/datos sintéticos.
+- Solicitud:
+¿Podéis revisar por qué no se está informando databricks_host para los componentes EconomicResearch y confirmar si falta alguna configuración, variable de entorno, secreto o parametrización del repositorio?
 
-Formato de salida obligatorio:
+También necesitamos confirmar si el workflow reutilizable debería gestionar el caso de una matriz vacía para evitar que el flujo completo quede bloqueado.
 
-# Examen tipo test — Testing Intermedio Spark
-
-## Contexto analizado
-Resume brevemente:
-- Qué carpetas de test has escaneado.
-- Qué frameworks has encontrado.
-- Qué patrones de mockeo reales aparecen.
-- Qué clases/ficheros parecen más relevantes para el examen.
-
-## Preguntas
-
-### Pregunta 1
-**Caso real:** `ruta/del/fichero.scala` — clase/método analizado.
-**Técnica evaluada:** por ejemplo, `spy + doReturn`, `RETURNS_DEEP_STUBS`, `thenAnswer`, `verify(times)`, etc.
-
-Enunciado de la pregunta.
-
-A) Opción A  
-B) Opción B  
-C) Opción C  
-D) Opción D  
-
----
-
-Repite este formato hasta la pregunta 20.
-
-## Plantilla de respuestas
-
-Al final, incluye una tabla:
-
-| Nº | Respuesta correcta | Explicación breve |
-|----|--------------------|-------------------|
-
-La explicación debe aclarar por qué la opción correcta es correcta y por qué las demás son menos adecuadas o erróneas.
-
-Criterios de calidad:
-- No inventes casuísticas que no estén en el código.
-- Si un patrón no aparece en el repositorio, puedes crear una pregunta comparativa, pero debes indicarlo claramente como “pregunta teórica complementaria”.
-- Prioriza ejemplos reales del proyecto por encima de teoría abstracta.
-- Sé exigente: el examen debe servir para comprobar si alguien entiende realmente cómo se están mockeando los componentes Spark en este código.
-- No modifiques ningún fichero del proyecto.
-- No ejecutes tests salvo que sea estrictamente necesario; primero analiza estáticamente el código.
-- Si detectas problemas en los tests, puedes convertirlos en preguntas del tipo “¿cuál sería la mejora correcta?”.
+- Evidencia:
+Se adjunta captura de la ejecución Deployment Delivery #83 y del mensaje de error.
