@@ -1,48 +1,703 @@
-- Resumen:
-El workflow de Deployment Delivery de los componentes EconomicResearch falla antes de ejecutar el job deploy_artifacts debido a que la matriz databricks_host no contiene ningún valor.
+Actúa como arquitecto senior de IA, Data Engineering y sistemas bancarios especializados en Credit Risk.
 
-- URL:
-[Pegar aquí la URL de la ejecución Deployment Delivery #83]
+Tienes acceso al código, configuración, prompts, notebooks, documentación, pipelines y arquitectura actual de este chatbot de Credit Risk.
 
-- Rama:
-main
+Tu objetivo NO es refactorizar por refactorizar ni proponer una arquitectura teórica desde cero.
 
-- Commit:
-73a7fee
+Tu objetivo es:
 
-- Recurrencia:
-Se reproduce al relanzar manualmente el workflow.
+1. Entender primero cómo funciona actualmente el chatbot.
+2. Identificar sus limitaciones reales.
+3. Compararlo con las capacidades actuales de los modelos OpenAI modernos, especialmente GPT-5.6 Sol y la Responses API.
+4. Detectar nuevas líneas de evolución que antes no eran viables o eran difíciles de implementar.
+5. Proponer mejoras incrementales que puedan introducirse sin comprometer seguridad, trazabilidad, costes ni estabilidad.
 
-- Bloqueo:
-El fallo impide continuar con el despliegue de los artefactos de EconomicResearch en el entorno correspondiente.
+## 1. Analiza el estado actual
 
-- Última ejecución:
-Deployment Delivery #83, relanzada mediante workflow_dispatch.
+Inspecciona el repositorio completo y describe:
 
-- Problema:
-Durante la evaluación de la estrategia del job deploy_artifacts, el workflow reutilizable cd-multithirds-main-maven.yml intenta generar una matriz utilizando databricks_host, pero dicho vector llega vacío.
+* Arquitectura general.
+* Flujo de una consulta desde que entra hasta que se devuelve la respuesta.
+* Modelo o modelos utilizados.
+* Sistema de prompts.
+* Context management.
+* RAG existente.
+* Fuentes de información disponibles.
+* Vector stores / embeddings / índices utilizados.
+* Tool calling o funciones externas.
+* Integraciones con Databricks, Spark, SQL, APIs u otros sistemas.
+* Gestión de conversaciones.
+* Gestión de permisos.
+* Logging.
+* Observabilidad.
+* Evaluación de respuestas.
+* Controles de seguridad.
+* Costes potenciales.
+* Principales cuellos de botella.
 
-- Error mostrado:
-Error when evaluating 'strategy' for job 'deploy_artifacts'.
-cd-multithirds-main-maven.yml@v0.0.1 (Line: 171, Col: 26):
-Matrix vector 'databricks_host' does not contain any values.
+Construye un esquema simplificado:
 
-- Pasos para reproducir:
-1. Acceder al workflow cd.yml.
-2. Lanzar o relanzar Deployment Delivery mediante workflow_dispatch.
-3. Esperar a que finalicen los pasos Setup environment, Setting Artifacts y Prepare Common Scripts.
-4. El job deploy_artifacts queda sin ejecutarse y la ejecución termina en estado Failure.
+User
+→ Chatbot
+→ Orchestrator
+→ Retrieval / Tools
+→ LLM
+→ Validation
+→ Response
 
-- Comportamiento esperado:
-El workflow debería obtener al menos un valor válido para databricks_host, generar la matriz de despliegue y ejecutar el job deploy_artifacts.
+adaptándolo al sistema real encontrado.
 
-- Comportamiento actual:
-La matriz databricks_host se genera vacía y GitHub Actions detiene el workflow durante la evaluación de la estrategia.
+No asumas que existe ningún componente si no aparece realmente en el código.
 
-- Solicitud:
-¿Podéis revisar por qué no se está informando databricks_host para los componentes EconomicResearch y confirmar si falta alguna configuración, variable de entorno, secreto o parametrización del repositorio?
+---
 
-También necesitamos confirmar si el workflow reutilizable debería gestionar el caso de una matriz vacía para evitar que el flujo completo quede bloqueado.
+## 2. Identifica limitaciones del sistema actual
 
-- Evidencia:
-Se adjunta captura de la ejecución Deployment Delivery #83 y del mensaje de error.
+Clasifica las limitaciones en:
+
+### A. Limitaciones del LLM
+
+Por ejemplo:
+
+* razonamiento insuficiente;
+* prompts excesivamente grandes;
+* dependencia excesiva del prompt;
+* respuestas inconsistentes;
+* dificultad para manejar preguntas complejas de Credit Risk;
+* alucinaciones;
+* dificultad para combinar múltiples fuentes.
+
+### B. Limitaciones de RAG
+
+Analiza:
+
+* calidad del retrieval;
+* chunking;
+* embeddings;
+* metadata filtering;
+* reranking;
+* retrieval híbrido;
+* recuperación de tablas;
+* recuperación de documentación técnica;
+* consultas SQL;
+* contexto excesivo;
+* contexto insuficiente;
+* duplicidad de información.
+
+### C. Limitaciones de arquitectura
+
+Busca:
+
+* lógica excesivamente acoplada;
+* llamadas secuenciales innecesarias;
+* demasiadas llamadas al LLM;
+* ausencia de tool calling;
+* ausencia de procesamiento paralelo;
+* ausencia de cache;
+* ausencia de routing;
+* ausencia de agentes especializados;
+* ausencia de validadores.
+
+### D. Limitaciones específicas de Credit Risk
+
+Analiza especialmente si el chatbot puede responder correctamente a preguntas relacionadas con:
+
+* PD;
+* LGD;
+* EAD;
+* Expected Loss;
+* IFRS 9;
+* Stage 1 / Stage 2 / Stage 3;
+* stress testing;
+* escenarios macroeconómicos;
+* sensibilidad de carteras;
+* modelos regulatorios;
+* metodologías internas;
+* políticas de riesgo;
+* documentación metodológica;
+* pipelines de cálculo;
+* trazabilidad del dato;
+* explicaciones de resultados;
+* comparativas entre escenarios.
+
+Diferencia claramente:
+
+1. conocimiento documental;
+2. consultas sobre datos;
+3. cálculo;
+4. razonamiento;
+5. explicación;
+6. auditoría / trazabilidad.
+
+---
+
+## 3. Analiza qué capacidades actuales del stack OpenAI podríamos estar desaprovechando
+
+Evalúa de manera explícita si el sistema podría beneficiarse de:
+
+### Reasoning effort
+
+Separar la complejidad del razonamiento de la longitud de la respuesta.
+
+Ejemplo conceptual:
+
+reasoning = high
+verbosity = low
+
+Determina qué tipos de preguntas de Credit Risk deberían utilizar:
+
+* reasoning bajo;
+* reasoning medio;
+* reasoning alto.
+
+No utilizar reasoning alto indiscriminadamente.
+
+---
+
+### Tool calling
+
+Evalúa si preguntas que actualmente se resuelven mediante RAG deberían convertirse en herramientas.
+
+Ejemplos:
+
+get_portfolio_metrics()
+get_pd_model_information()
+get_stress_scenario()
+query_credit_risk_dataset()
+get_methodology_document()
+compare_scenarios()
+calculate_expected_loss()
+
+Determina qué información debería:
+
+* recuperarse mediante RAG;
+* consultarse mediante SQL;
+* calcularse mediante código;
+* obtenerse mediante API;
+* dejarse al razonamiento del LLM.
+
+El LLM NO debe calcular ni inventar datos que puedan obtenerse deterministicamente mediante una herramienta.
+
+---
+
+### Parallel tool calling
+
+Busca consultas donde varias fuentes puedan consultarse simultáneamente.
+
+Ejemplo:
+
+Pregunta:
+
+"¿Por qué aumenta la pérdida esperada de esta cartera bajo el escenario adverso?"
+
+Posible ejecución paralela:
+
+* obtener PD;
+* obtener LGD;
+* obtener EAD;
+* obtener escenario macro;
+* obtener composición de cartera;
+* recuperar metodología relevante.
+
+Después sintetizar los resultados.
+
+Analiza dónde este patrón puede reducir latencia.
+
+---
+
+### Programmatic tool orchestration
+
+Evalúa si consultas complejas podrían resolverse mejor mediante una secuencia controlada de herramientas en vez de múltiples llamadas independientes al LLM.
+
+Busca casos donde el modelo necesite:
+
+1. obtener datos;
+2. procesarlos;
+3. comparar resultados;
+4. ejecutar otra consulta;
+5. sintetizar conclusiones.
+
+---
+
+### Agents especializados
+
+NO propongas multi-agent por defecto.
+
+Analiza si realmente existen dominios suficientemente diferentes como para justificar agentes especializados.
+
+Por ejemplo:
+
+CreditRiskRouter
+
+→ MethodologyAgent
+→ DataAgent
+→ StressTestingAgent
+→ RegulatoryAgent
+→ ModelExplainerAgent
+
+Determina:
+
+* qué responsabilidad tendría cada agente;
+* qué herramientas utilizaría;
+* si aporta valor frente a un solo agente con tools;
+* impacto en latencia;
+* impacto en costes;
+* impacto en complejidad.
+
+---
+
+## 4. Explora una evolución hacia un "Credit Risk Copilot"
+
+Analiza si el chatbot podría evolucionar desde:
+
+"pregunta → documento → respuesta"
+
+hacia:
+
+"pregunta → razonamiento → datos + documentación + herramientas → evidencia → respuesta"
+
+Ejemplo:
+
+Usuario:
+
+"¿Por qué aumenta el riesgo de esta cartera en el escenario 2027 adverso?"
+
+El sistema ideal podría:
+
+1. identificar la cartera;
+2. obtener métricas actuales;
+3. obtener métricas del escenario adverso;
+4. recuperar variables macroeconómicas;
+5. identificar drivers de PD/LGD;
+6. recuperar metodología;
+7. calcular contribuciones;
+8. explicar los principales drivers;
+9. mostrar evidencia utilizada;
+10. indicar incertidumbre.
+
+Evalúa cuánto de este flujo es viable con la arquitectura actual.
+
+---
+
+## 5. RAG de nueva generación
+
+Analiza posibles mejoras:
+
+* hybrid search;
+* lexical + semantic search;
+* reranking;
+* metadata filtering;
+* hierarchical retrieval;
+* parent-child chunks;
+* query rewriting;
+* multi-query retrieval;
+* contextual retrieval;
+* table-aware retrieval;
+* document routing;
+* retrieval basado en permisos;
+* temporal filtering;
+* version filtering.
+
+En Credit Risk presta especial atención a:
+
+VERSIÓN DEL DOCUMENTO.
+
+Una metodología de 2023 puede ser incorrecta para una consulta sobre 2026.
+
+El sistema debería ser consciente de:
+
+document_version
+effective_date
+portfolio
+country
+business_unit
+model
+scenario
+regulation
+
+Evalúa cómo introducir estos metadatos.
+
+---
+
+## 6. Structured outputs
+
+Analiza si algunas respuestas deberían utilizar estructuras internas tipadas.
+
+Por ejemplo:
+
+{
+"answer": "...",
+"confidence": 0.87,
+"sources": [],
+"metrics": [],
+"assumptions": [],
+"risk_drivers": [],
+"warnings": []
+}
+
+El usuario final puede seguir viendo lenguaje natural.
+
+La estructura servirá para:
+
+* validación;
+* UI;
+* observabilidad;
+* testing;
+* auditoría.
+
+---
+
+## 7. Confidence y evidencia
+
+Diseña una estrategia para evitar respuestas aparentemente seguras sin evidencia suficiente.
+
+La respuesta debería poder diferenciar:
+
+SUPPORTED_BY_DATA
+
+SUPPORTED_BY_DOCUMENTATION
+
+INFERRED
+
+CALCULATED
+
+INSUFFICIENT_INFORMATION
+
+No utilizar simplemente un confidence score inventado por el LLM.
+
+La confianza debe derivarse, cuando sea posible, de señales objetivas.
+
+---
+
+## 8. Explainability
+
+En un entorno bancario la respuesta debe ser defendible.
+
+Analiza cómo conseguir que cada respuesta pueda indicar:
+
+* datos utilizados;
+* documentos utilizados;
+* versión de documentos;
+* cálculos realizados;
+* herramientas ejecutadas;
+* hipótesis;
+* limitaciones.
+
+Propón un concepto de:
+
+Answer Evidence Graph
+
+Pregunta
+→ datos
+→ documentos
+→ cálculos
+→ razonamiento
+→ respuesta
+
+sin revelar chain-of-thought privada del modelo.
+
+---
+
+## 9. Observabilidad
+
+Evalúa si actualmente podemos saber:
+
+* qué documentos recuperó;
+* qué chunks utilizó;
+* qué herramientas ejecutó;
+* cuánto tardó cada paso;
+* tokens utilizados;
+* coste;
+* modelo utilizado;
+* reasoning effort utilizado;
+* errores de retrieval;
+* errores de tools;
+* respuesta final.
+
+Propón un esquema de trazas.
+
+---
+
+## 10. Evaluación del chatbot
+
+Diseña un framework de evaluación específico para Credit Risk.
+
+No utilizar únicamente preguntas genéricas.
+
+Crear categorías:
+
+Simple factual retrieval
+
+Methodology
+
+Data queries
+
+Scenario analysis
+
+Model explanation
+
+Cross-document reasoning
+
+Regulatory questions
+
+Ambiguous questions
+
+Impossible questions
+
+Outdated-document traps
+
+Hallucination traps
+
+Para cada pregunta evaluar:
+
+* correctness;
+* groundedness;
+* retrieval quality;
+* source correctness;
+* completeness;
+* latency;
+* cost;
+* hallucination rate.
+
+---
+
+## 11. Seguridad y governance
+
+Considera que estamos en un entorno bancario.
+
+Analiza:
+
+* RBAC;
+* document-level permissions;
+* row-level permissions;
+* column-level permissions;
+* PII;
+* información confidencial;
+* logging;
+* prompt injection;
+* malicious documents;
+* data leakage;
+* cross-user context leakage.
+
+El LLM nunca debe permitir saltarse permisos existentes.
+
+---
+
+## 12. Busca específicamente oportunidades derivadas de GPT-5.6 Sol
+
+Identifica funcionalidades o patrones que antes podían ser:
+
+* demasiado caros;
+* demasiado lentos;
+* demasiado complejos;
+* poco fiables;
+
+pero que ahora podrían ser razonables.
+
+Para cada oportunidad explica:
+
+ANTES
+
+limitación existente
+
+AHORA
+
+capacidad disponible
+
+IMPACTO
+
+beneficio para el chatbot
+
+COMPLEJIDAD
+
+LOW / MEDIUM / HIGH
+
+PRIORIDAD
+
+P0 / P1 / P2 / P3
+
+---
+
+## 13. No propongas mejoras genéricas
+
+Evita recomendaciones como:
+
+"mejorar el prompt"
+
+"mejorar el RAG"
+
+"usar agentes"
+
+"añadir caching"
+
+sin explicar exactamente:
+
+* problema detectado;
+* fichero o componente afectado;
+* cambio propuesto;
+* arquitectura resultante;
+* beneficio esperado;
+* coste;
+* riesgo.
+
+---
+
+## 14. Identifica quick wins
+
+Busca mejoras implementables sin rediseñar todo el sistema.
+
+Prioriza inicialmente cambios con:
+
+alto impacto
+
+*
+
+bajo riesgo
+
+*
+
+baja complejidad.
+
+Ejemplos potenciales:
+
+routing de consultas;
+
+structured outputs;
+
+metadata filtering;
+
+reranking;
+
+query rewriting;
+
+tool calling;
+
+parallel retrieval;
+
+prompt caching;
+
+reasoning dinámico;
+
+tracing;
+
+evaluation datasets.
+
+Pero solo recomienda las que tengan sentido tras analizar el código.
+
+---
+
+## 15. Propón un roadmap
+
+Divide las mejoras en:
+
+### FASE 0 — Diagnóstico
+
+Medición del sistema actual.
+
+### FASE 1 — Quick wins
+
+Cambios pequeños con impacto inmediato.
+
+### FASE 2 — Arquitectura
+
+Mejoras estructurales.
+
+### FASE 3 — Credit Risk Copilot
+
+Integración profunda con datos y herramientas.
+
+### FASE 4 — Advanced AI
+
+Agentes, reasoning avanzado y automatización de análisis.
+
+---
+
+## 16. Entregable final
+
+Quiero un informe estructurado con:
+
+### 1. CURRENT ARCHITECTURE
+
+Cómo funciona actualmente.
+
+### 2. MAIN LIMITATIONS
+
+Top 10 problemas reales encontrados.
+
+### 3. UNTAPPED CAPABILITIES
+
+Capacidades modernas que no estamos usando.
+
+### 4. QUICK WINS
+
+Mejoras implementables rápidamente.
+
+### 5. ARCHITECTURE EVOLUTION
+
+Arquitectura objetivo recomendada.
+
+### 6. CREDIT RISK USE CASES
+
+Nuevos casos de uso posibles.
+
+### 7. PRIORITY MATRIX
+
+Tabla:
+
+Improvement | Impact | Complexity | Risk | Cost | Priority
+
+### 8. ROADMAP
+
+0-3 meses
+
+3-6 meses
+
+6-12 meses
+
+### 9. EXAMPLE ARCHITECTURE
+
+Representación tipo:
+
+User
+↓
+Intent / Risk Router
+↓
+Credit Risk Orchestrator
+↓
+┌───────────────┬───────────────┬────────────────┐
+RAG             SQL/Data        Calculation Tools
+│               │               │
+Methodology     Portfolio       PD/LGD/EAD
+Policies        Scenarios       EL / Stress
+Regulation      Metrics
+└───────────────┴───────────────┴────────────────┘
+↓
+Evidence aggregation
+↓
+GPT-5.6 Sol reasoning
+↓
+Validation
+↓
+Grounded response
+
+### 10. TOP 5 RECOMMENDATIONS
+
+Termina indicando exclusivamente las cinco mejoras que implementarías primero.
+
+Para cada una:
+
+WHY
+
+EXPECTED IMPACT
+
+IMPLEMENTATION
+
+AFFECTED COMPONENTS
+
+ESTIMATED COMPLEXITY
+
+No modifiques todavía el código.
+
+Primero realiza exclusivamente el análisis arquitectónico y funcional.
+
+Cuando tengas dudas entre mantener el diseño actual o introducir una arquitectura nueva, favorece siempre la solución más simple que resuelva el problema.
